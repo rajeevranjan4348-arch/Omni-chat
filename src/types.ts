@@ -7,6 +7,7 @@ export type AppMode =
   | 'tts'
   | 'jarvis'
   | 'coder'
+  | 'document-chat'
   | 'settings'
   | 'logs';
 

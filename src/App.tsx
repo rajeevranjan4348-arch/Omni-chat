@@ -11,6 +11,7 @@ import { CoderMode } from './modes/CoderMode';
 import { SettingsMode } from './modes/SettingsMode';
 import { LogsMode } from './modes/LogsMode';
 import { LiquidChatMode } from './modes/LiquidChatMode';
+import { DocumentChatMode } from './modes/DocumentChatMode';
 import { Menu, X } from 'lucide-react';
 import { useTheme } from './contexts/ThemeContext';
 import { useSettings } from './contexts/SettingsContext';
@@ -42,6 +43,8 @@ export default function App() {
         return <ChatMode key={currentMode} mode={currentMode} />;
       case 'liquid-chat':
         return <LiquidChatMode />;
+      case 'document-chat':
+        return <DocumentChatMode />;
       case 'voice-live':
         return <VoiceMode />;
       case 'search-maps':

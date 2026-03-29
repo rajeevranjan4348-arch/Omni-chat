@@ -1,0 +1,5 @@
+{
+  "name": "OmniChat AI",
+  "description": "A multi-modal AI chatbot featuring text, voice, search grounding, and more.",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"]
+}

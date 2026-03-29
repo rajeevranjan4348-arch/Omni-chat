@@ -62,13 +62,16 @@ export const OmniChatMode: React.FC = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const initChat = useCallback(() => {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  const initChat = useCallback((currentMessages: Msg[] = messages) => {
+    if (!apiKey) return;
     const ai = getAiInstance();
     let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure — code blocks, lists, bold text.`;
     if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
     if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
 
-    const history = messages
+    const history = currentMessages
       .filter(m => !m.streaming && m.text)
       .map(m => ({ role: m.role, parts: [{ text: m.text }] }));
 
@@ -77,11 +80,7 @@ export const OmniChatMode: React.FC = () => {
       config: { systemInstruction: { parts: [{ text: sys }] } },
       history: history.length > 0 ? history : undefined,
     });
-  }, [messages, userProfile]);
-
-  useEffect(() => {
-    initChat();
-  }, [userProfile]);
+  }, [messages, userProfile, apiKey]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -92,7 +91,15 @@ export const OmniChatMode: React.FC = () => {
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
-    if (!chatRef.current) initChat();
+    if (!apiKey) {
+      setMessages(prev => [
+        ...prev,
+        { id: `u-${Date.now()}`, role: 'user', text },
+        { id: `m-${Date.now()}`, role: 'model', text: '**No API key found.** Please add your `GEMINI_API_KEY` in the Secrets panel (the lock icon in the left sidebar), then restart the app.' },
+      ]);
+      return;
+    }
+    if (!chatRef.current) initChat(messages);
 
     const userMsg: Msg = { id: `u-${Date.now()}`, role: 'user', text };
     const modelId = `m-${Date.now()}`;
@@ -132,7 +139,6 @@ export const OmniChatMode: React.FC = () => {
     if (!window.confirm('Clear all messages?')) return;
     setMessages([]);
     chatRef.current = null;
-    setTimeout(() => initChat(), 0);
   };
 
   const retryLast = () => {
@@ -142,11 +148,8 @@ export const OmniChatMode: React.FC = () => {
       const idx = prev.lastIndexOf(lastUser);
       return prev.slice(0, idx);
     });
-    setTimeout(() => {
-      chatRef.current = null;
-      initChat();
-      sendMessage(lastUser.text);
-    }, 50);
+    chatRef.current = null;
+    setTimeout(() => sendMessage(lastUser.text), 50);
   };
 
   const startRecording = async () => {

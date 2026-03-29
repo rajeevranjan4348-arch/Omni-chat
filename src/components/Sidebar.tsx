@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppMode } from '../types';
-import { MessageSquare, Zap, Mic, MapPin, FileAudio, Volume2, Cpu, Code, Settings, TerminalSquare, Sparkles, FileText } from 'lucide-react';
+import { MessageSquare, Zap, Mic, MapPin, FileAudio, Volume2, Cpu, Code, Settings, TerminalSquare, Sparkles, Bot } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface SidebarProps {
@@ -15,7 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentMode, onModeChange }) =
     { id: 'jarvis', label: 'J.A.R.V.I.S. HUD', icon: <Cpu size={20} /> },
     { id: 'coder', label: 'AI Coder IDE', icon: <Code size={20} /> },
     { id: 'liquid-chat', label: 'Liquid Chat', icon: <Sparkles size={20} /> },
-    { id: 'document-chat', label: 'Document Chat', icon: <FileText size={20} /> },
+    { id: 'omni-chat', label: 'Omni Chat', icon: <Bot size={20} /> },
     { id: 'chat-pro', label: 'Pro Chat (Thinking)', icon: <MessageSquare size={20} /> },
     { id: 'chat-fast', label: 'Fast Chat', icon: <Zap size={20} /> },
     { id: 'voice-live', label: 'Voice (Live API)', icon: <Mic size={20} /> },

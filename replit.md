@@ -35,7 +35,9 @@ src/
 ## AI Modes
 
 - `jarvis` - Main conversational AI mode
-- `chat-pro` / `chat-fast` - Chat variants
+- `omni-chat` - Clean, minimal chat page to talk with Omni AI
+- `liquid-chat` - Animated themed chat UI
+- `chat-pro` / `chat-fast` - Chat variants with conversation history
 - `voice-live` - Live voice interaction
 - `search-maps` - Search and maps grounding
 - `transcription` - Audio transcription

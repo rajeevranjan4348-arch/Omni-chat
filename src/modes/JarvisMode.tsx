@@ -76,7 +76,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
 
     const ai = getAiInstance();
     chatRef.current = ai.chats.create({
-      model: 'gemini-3.1-pro-preview',
+      model: 'gemini-2.5-flash',
       config: {
         systemInstruction: { parts: [{ text: instructionText }] },
         tools: [{ googleSearch: {} }]

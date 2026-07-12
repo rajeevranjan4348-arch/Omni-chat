@@ -158,7 +158,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
 
   const initChat = () => {
     const ai = getAiInstance();
-    const modelName = mode === 'chat-pro' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-lite-preview';
+    const modelName = mode === 'chat-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     
     let systemInstruction = `You are OmniChat AI, an advanced, highly intelligent, and versatile AI assistant. `;
     

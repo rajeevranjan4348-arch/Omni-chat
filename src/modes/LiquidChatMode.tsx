@@ -409,7 +409,7 @@ export const LiquidChatMode: React.FC = () => {
     try {
       const ai = getAiInstance();
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-2.5-flash',
         contents: input,
         config: {
           systemInstruction: activeMode.sys

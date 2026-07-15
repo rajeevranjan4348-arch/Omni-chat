@@ -13,12 +13,14 @@ import { SettingsMode } from './modes/SettingsMode';
 import { LogsMode } from './modes/LogsMode';
 import { LiquidChatMode } from './modes/LiquidChatMode';
 import { OmniChatMode } from './modes/OmniChatMode';
+import { DashboardMode } from './modes/DashboardMode';
 import { Menu, X } from 'lucide-react';
 import { useTheme } from './contexts/ThemeContext';
 import { useSettings } from './contexts/SettingsContext';
 import { useWakeWord } from './hooks/useWakeWord';
 
 const MODE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
   jarvis: 'J.A.R.V.I.S. HUD',
   'chat-pro': 'Pro Chat',
   'chat-fast': 'Fast Chat',
@@ -50,6 +52,8 @@ export default function App() {
 
   const renderMode = () => {
     switch (currentMode) {
+      case 'dashboard':
+        return <DashboardMode onModeChange={handleModeChange} />;
       case 'jarvis':
         return <JarvisMode wakeWordTriggered={wakeWordTriggered} />;
       case 'chat-pro':

@@ -5,10 +5,9 @@ import { ChatInput } from '../components/ChatInput';
 import { SystemStatus } from '../components/SystemStatus';
 import { getAiInstance } from '../services/gemini';
 import { ThinkingLevel, Type } from '@google/genai';
-import { Settings2, Globe, UserCircle, Link as LinkIcon, Trash2, Plus, MessageSquare } from 'lucide-react';
+import { Settings2, Globe, UserCircle, Link as LinkIcon, Trash2, Plus, MessageSquare, History, X, Search, Clock } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { Panel, Group, Separator } from 'react-resizable-panels';
 
 interface ChatModeProps {
   mode: 'chat-pro' | 'chat-fast';
@@ -142,6 +141,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
   
   const [language, setLanguage] = useState('English');
   const [personality, setPersonality] = useState('Witty');
@@ -443,57 +444,102 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
     }
   };
 
+  const filteredConversations = conversations.filter(c =>
+    c.title.toLowerCase().includes(historySearch.toLowerCase()) ||
+    c.messages.some(m => m.text?.toLowerCase().includes(historySearch.toLowerCase()))
+  );
+
   return (
     <div className={`flex h-full relative ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
-      <Group orientation="horizontal" className="w-full h-full">
-        {/* Sidebar Panel */}
-        <Panel defaultSize={20} minSize={15} maxSize={40} className={`hidden md:flex flex-col border-r ${isDarkMode ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50/50'}`}>
-          <div className={`p-3 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
-            <h3 className={`font-semibold text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Chat History</h3>
-            <button 
-              onClick={createNewChat} 
-              title="New Chat"
-              className={`p-1.5 rounded-md transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-slate-200 text-slate-500 hover:text-slate-900'}`}
-            >
-              <Plus size={16} />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {conversations.map(conv => (
-              <div 
-                key={conv.id}
-                onClick={() => setCurrentConversationId(conv.id)}
-                className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                  currentConversationId === conv.id 
-                    ? (isDarkMode ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900') 
-                    : (isDarkMode ? 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200' : 'hover:bg-slate-200/50 text-slate-600 hover:text-slate-800')
-                }`}
-              >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <MessageSquare size={14} className="shrink-0 opacity-50" />
-                  <span className="text-sm truncate">{conv.title}</span>
-                </div>
-                <button 
-                  onClick={(e) => deleteConversation(conv.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500 transition-all"
-                  title="Delete Chat"
-                >
-                  <Trash2 size={14} />
+
+      {/* ── Right-side History Drawer ── */}
+      {showHistory && (
+        <>
+          {/* Backdrop */}
+          <div className="absolute inset-0 z-20" onClick={() => setShowHistory(false)} />
+          {/* Panel */}
+          <div className="absolute inset-y-0 right-0 z-30 flex flex-col w-72 shadow-2xl"
+            style={{ background: isDarkMode ? 'rgba(10,12,20,0.98)' : '#f8fafc', borderLeft: `1px solid ${isDarkMode ? 'rgba(99,102,241,0.18)' : '#e2e8f0'}`, backdropFilter: 'blur(20px)', animation: 'chatHist 0.22s ease both' }}>
+            <style>{`@keyframes chatHist { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }`}</style>
+
+            {/* Header */}
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${isDarkMode ? 'border-white/8' : 'border-slate-200'}`}>
+              <div className="flex items-center gap-2">
+                <History size={15} className={isDarkMode ? 'text-indigo-400' : 'text-indigo-500'} />
+                <span className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Chat History</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}>{conversations.length}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={createNewChat} title="New Chat"
+                  className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-white/8 text-white/40 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'}`}>
+                  <Plus size={14}/>
+                </button>
+                <button onClick={() => setShowHistory(false)}
+                  className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-white/8 text-white/40 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'}`}>
+                  <X size={14}/>
                 </button>
               </div>
-            ))}
-            {conversations.length === 0 && (
-              <div className={`text-center p-4 text-sm ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                No past conversations
-              </div>
-            )}
-          </div>
-        </Panel>
+            </div>
 
-        <Separator className="hidden md:block w-1 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-col-resize" />
+            {/* Search */}
+            <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}` }}>
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDarkMode ? 'bg-white/5 border border-white/8' : 'bg-slate-100 border border-slate-200'}`}>
+                <Search size={12} className={isDarkMode ? 'text-white/30' : 'text-slate-400'} />
+                <input type="text" value={historySearch} onChange={e => setHistorySearch(e.target.value)}
+                  placeholder="Search conversations…"
+                  className={`flex-1 bg-transparent outline-none text-xs ${isDarkMode ? 'text-white/80 placeholder-white/25' : 'text-slate-700 placeholder-slate-400'}`}/>
+                {historySearch && <button onClick={() => setHistorySearch('')} className={isDarkMode ? 'text-white/30 hover:text-white/60' : 'text-slate-400 hover:text-slate-600'}><X size={11}/></button>}
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto py-2" style={{ scrollbarWidth: 'thin' }}>
+              {filteredConversations.length === 0 ? (
+                <div className={`flex flex-col items-center justify-center h-24 gap-2 ${isDarkMode ? 'text-white/20' : 'text-slate-400'}`}>
+                  <MessageSquare size={20}/>
+                  <span className="text-xs">{historySearch ? 'No matches' : 'No conversations yet'}</span>
+                </div>
+              ) : filteredConversations.map(conv => (
+                <div key={conv.id} className="px-2 mb-0.5">
+                  <div onClick={() => { setCurrentConversationId(conv.id); setShowHistory(false); }}
+                    className={`group flex items-start gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all border ${
+                      currentConversationId === conv.id
+                        ? isDarkMode ? 'bg-indigo-500/12 border-indigo-500/30 text-white' : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                        : isDarkMode ? 'border-transparent hover:bg-white/5 hover:border-white/8' : 'border-transparent hover:bg-slate-100'
+                    }`}>
+                    <div className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center mt-0.5 ${isDarkMode ? 'bg-indigo-500/12 border border-indigo-500/20' : 'bg-indigo-100 border border-indigo-200'}`}>
+                      <MessageSquare size={12} className={isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}/>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium truncate leading-snug ${isDarkMode ? 'text-white/80' : 'text-slate-700'}`}>{conv.title}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Clock size={9} className={isDarkMode ? 'text-white/20' : 'text-slate-400'}/>
+                        <span className={`text-[10px] ${isDarkMode ? 'text-white/25' : 'text-slate-400'}`}>
+                          {new Date(conv.updatedAt).toLocaleDateString()}
+                        </span>
+                        <span className={`text-[10px] ${isDarkMode ? 'text-white/20' : 'text-slate-300'}`}>· {conv.messages.length} msgs</span>
+                      </div>
+                    </div>
+                    <button onClick={e => deleteConversation(conv.id, e)}
+                      className={`p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-red-500/15 text-red-400' : 'hover:bg-red-50 text-red-500'}`}
+                      title="Delete">
+                      <Trash2 size={11}/>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className={`px-3 py-2.5 text-center text-[10px] border-t ${isDarkMode ? 'text-white/20 border-white/6' : 'text-slate-400 border-slate-200'}`}>
+              {conversations.length} conversation{conversations.length !== 1 ? 's' : ''} saved locally
+            </div>
+          </div>
+        </>
+      )}
 
         {/* Main Chat Panel */}
-        <Panel className="flex flex-col h-full relative">
+        <div className="flex flex-col h-full relative w-full">
           <SystemStatus />
           <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} border-b p-3 flex justify-between items-center z-10`}>
             <div className={`flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm overflow-x-auto hide-scrollbar whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'} mr-2`}>
@@ -503,6 +549,25 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
               {urlContext && <span className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${isDarkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><LinkIcon size={10} className="sm:w-3 sm:h-3"/> URL Context</span>}
             </div>
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <button
+                onClick={createNewChat}
+                title="New Chat"
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-slate-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+              >
+                <Plus size={18} />
+              </button>
+              <button
+                onClick={() => setShowHistory(v => !v)}
+                title="Chat History"
+                className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${showHistory ? `text-indigo-400 bg-indigo-500/15` : `${isDarkMode ? 'text-slate-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}`}
+              >
+                <History size={18} />
+                {conversations.length > 0 && (
+                  <span className={`text-[10px] px-1 rounded-full leading-none hidden sm:inline ${isDarkMode ? 'bg-indigo-500/25 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}>
+                    {conversations.length}
+                  </span>
+                )}
+              </button>
               <button 
                 onClick={() => {
                   if (window.confirm('Are you sure you want to clear the current chat history?')) {
@@ -627,8 +692,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
             )}
           </div>
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-        </Panel>
-      </Group>
+        </div>
     </div>
   );
 };

@@ -102,7 +102,7 @@ const STYLES = `
     to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes omni-panel-in {
-    from { opacity: 0; transform: translateX(-20px); }
+    from { opacity: 0; transform: translateX(20px); }
     to   { opacity: 1; transform: translateX(0); }
   }
   .omni-msg-in    { animation: omni-msg-in 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
@@ -212,8 +212,8 @@ function HistoryPanel({
   if (older.length) grouped.push({ label: 'Older', items: older });
 
   return (
-    <div className="omni-panel-in absolute inset-y-0 left-0 z-30 flex flex-col w-72"
-      style={{ background:'rgba(10,10,18,0.97)',borderRight:'1px solid rgba(139,92,246,0.15)',backdropFilter:'blur(24px)' }}>
+    <div className="omni-panel-in absolute inset-y-0 right-0 z-30 flex flex-col w-72"
+      style={{ background:'rgba(10,10,18,0.97)',borderLeft:'1px solid rgba(139,92,246,0.15)',backdropFilter:'blur(24px)' }}>
 
       {/* Panel header */}
       <div className="flex items-center justify-between px-4 py-3.5 shrink-0"

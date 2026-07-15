@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Send, Square, Loader2, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Globe, Cpu, HardDrive, Wifi, Activity } from 'lucide-react';
+import { Mic, Send, Square, Loader2, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Globe, Cpu, HardDrive, Wifi, Activity, History, X, Search, Plus, Clock, MessageSquare, Trash2 } from 'lucide-react';
 import { getAiInstance, generateSpeech, transcribeAudio } from '../services/gemini';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -7,19 +7,75 @@ interface JarvisModeProps {
   wakeWordTriggered?: boolean;
 }
 
+interface JarvisConversation {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messages: {role: string, text: string, chunks?: any[]}[];
+}
+
+const JARVIS_STORAGE = 'omnichat_jarvis_conversations';
+
+function loadJarvisConvs(): JarvisConversation[] {
+  try {
+    const saved = localStorage.getItem(JARVIS_STORAGE);
+    if (saved) return JSON.parse(saved);
+    // Migrate old single-conversation
+    const old = localStorage.getItem('omnichat_jarvis_messages');
+    if (old) {
+      const msgs = JSON.parse(old);
+      if (msgs?.length) return [{ id: '1', title: 'Session 1', updatedAt: Date.now(), messages: msgs }];
+    }
+  } catch {}
+  return [{ id: '1', title: 'Session 1', updatedAt: Date.now(), messages: [{ role: 'model', text: 'J.A.R.V.I.S. system online. Awaiting command.' }] }];
+}
+
 export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => {
   const { ttsVoice } = useSettings();
-  const [messages, setMessages] = useState<{role: string, text: string, chunks?: any[]}[]>(() => {
-    const saved = localStorage.getItem('omnichat_jarvis_messages');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
+  const [conversations, setConversations] = useState<JarvisConversation[]>(loadJarvisConvs);
+  const [currentConvId, setCurrentConvId] = useState<string>(() => loadJarvisConvs()[0]?.id || '1');
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+
+  const currentConv = conversations.find(c => c.id === currentConvId) || conversations[0];
+  const messages = currentConv?.messages || [];
+
+  const setMessages = (updater: any) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id !== currentConvId) return c;
+      const newMsgs = typeof updater === 'function' ? updater(c.messages) : updater;
+      const firstUser = newMsgs.find((m: any) => m.role === 'user');
+      return { ...c, messages: newMsgs, updatedAt: Date.now(), title: firstUser ? firstUser.text.slice(0, 40) : c.title };
+    }));
+  };
+
+  useEffect(() => {
+    localStorage.setItem(JARVIS_STORAGE, JSON.stringify(conversations));
+  }, [conversations]);
+
+  const startNewConversation = () => {
+    const id = `jarvis-${Date.now()}`;
+    const conv: JarvisConversation = { id, title: 'New Session', updatedAt: Date.now(), messages: [{ role: 'model', text: 'J.A.R.V.I.S. system online. Awaiting command.' }] };
+    setConversations(prev => [conv, ...prev]);
+    setCurrentConvId(id);
+    setShowHistory(false);
+    chatRef.current = null;
+  };
+
+  const deleteConversation = (id: string) => {
+    if (!window.confirm('Delete this session?')) return;
+    setConversations(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      if (id === currentConvId && updated.length > 0) setCurrentConvId(updated[0].id);
+      else if (updated.length === 0) {
+        const fresh: JarvisConversation = { id: 'j1', title: 'Session 1', updatedAt: Date.now(), messages: [{ role: 'model', text: 'J.A.R.V.I.S. system online. Awaiting command.' }] };
+        setCurrentConvId(fresh.id);
+        return [fresh];
       }
-    }
-    return [{role: 'model', text: 'J.A.R.V.I.S. system online. Awaiting command.'}];
-  });
+      return updated;
+    });
+  };
+
   const [input, setInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<'ONLINE' | 'LISTENING' | 'PROCESSING' | 'SPEAKING'>('ONLINE');
@@ -170,7 +226,6 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
   };
 
   useEffect(() => {
-    localStorage.setItem('omnichat_jarvis_messages', JSON.stringify(messages));
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -477,6 +532,73 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
         .jarvis-scrollbar::-webkit-scrollbar-thumb { background: #00f7ff; }
       `}</style>
 
+      {/* Right-side History Panel */}
+      {showHistory && (
+        <>
+          <div className="absolute inset-0 z-30" onClick={() => setShowHistory(false)} />
+          <div className="absolute inset-y-0 right-0 z-40 flex flex-col w-64 sm:w-72" style={{ background: 'rgba(0,5,10,0.98)', borderLeft: '1px solid rgba(0,247,255,0.2)', backdropFilter: 'blur(20px)', animation: 'jarvisHistIn 0.2s ease both' }}>
+            <style>{`@keyframes jarvisHistIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }`}</style>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#00f7ff]/15">
+              <div className="flex items-center gap-2">
+                <History size={14} className="text-[#00f7ff]" />
+                <span className="text-xs font-bold text-[#00f7ff] tracking-widest uppercase">History</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#00f7ff]/15 text-[#00f7ff]">{conversations.length}</span>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={startNewConversation} title="New Session" className="w-6 h-6 rounded flex items-center justify-center bg-[#00f7ff]/10 hover:bg-[#00f7ff]/20 text-[#00f7ff] transition-colors">
+                  <Plus size={12} />
+                </button>
+                <button onClick={() => setShowHistory(false)} className="w-6 h-6 rounded flex items-center justify-center bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-colors">
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+            {/* Search */}
+            <div className="px-3 py-2 border-b border-[#00f7ff]/8">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#00f7ff]/5 border border-[#00f7ff]/12">
+                <Search size={11} className="text-[#00f7ff]/40 shrink-0" />
+                <input type="text" value={historySearch} onChange={e => setHistorySearch(e.target.value)}
+                  placeholder="Search sessions…"
+                  className="flex-1 bg-transparent outline-none text-[11px] text-[#00f7ff]/80 placeholder-[#00f7ff]/25 font-mono" />
+                {historySearch && <button onClick={() => setHistorySearch('')} className="text-[#00f7ff]/30"><X size={10}/></button>}
+              </div>
+            </div>
+            {/* List */}
+            <div className="flex-1 overflow-y-auto py-1 jarvis-scrollbar">
+              {conversations.filter(c => c.title.toLowerCase().includes(historySearch.toLowerCase())).map(conv => (
+                <div key={conv.id} onClick={() => { setCurrentConvId(conv.id); setShowHistory(false); chatRef.current = null; }}
+                  className={`flex items-start gap-2.5 mx-2 mb-0.5 p-2.5 rounded-lg cursor-pointer border transition-all ${conv.id === currentConvId ? 'border-[#00f7ff]/30 bg-[#00f7ff]/8' : 'border-transparent hover:border-[#00f7ff]/12 hover:bg-[#00f7ff]/5'}`}>
+                  <div className="w-6 h-6 rounded shrink-0 flex items-center justify-center bg-[#00f7ff]/10 border border-[#00f7ff]/20 mt-0.5">
+                    <MessageSquare size={11} className="text-[#00f7ff]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-white/80 truncate">{conv.title}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Clock size={8} className="text-white/20" />
+                      <span className="text-[9px] text-white/25 font-mono">{new Date(conv.updatedAt).toLocaleDateString()}</span>
+                      <span className="text-[9px] text-white/20">· {conv.messages.length} msgs</span>
+                    </div>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}
+                    className="text-white/15 hover:text-red-400 transition-colors p-0.5" title="Delete">
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              ))}
+              {conversations.filter(c => c.title.toLowerCase().includes(historySearch.toLowerCase())).length === 0 && (
+                <div className="flex flex-col items-center justify-center h-20 gap-2 text-white/20">
+                  <MessageSquare size={18} /><span className="text-[10px]">{historySearch ? 'No matches' : 'No sessions'}</span>
+                </div>
+              )}
+            </div>
+            <div className="px-3 py-2 border-t border-[#00f7ff]/8 text-center text-[9px] text-[#00f7ff]/20 font-mono">
+              {conversations.length} session{conversations.length !== 1 ? 's' : ''} stored
+            </div>
+          </div>
+        </>
+      )}
+
       {/* System Status Bar */}
       <div className="absolute top-0 left-0 right-0 h-6 sm:h-8 bg-[#00f7ff]/10 border-b border-[#00f7ff]/30 flex items-center justify-between px-2 sm:px-4 text-[8px] sm:text-[10px] z-20 backdrop-blur-sm">
         <div className="flex items-center gap-3 sm:gap-6">
@@ -594,6 +716,24 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
 
       {/* Bottom Chat & Input */}
       <div className="h-[50%] sm:h-[45%] min-h-[200px] sm:min-h-[250px] flex flex-col z-10 p-2 sm:p-4 gap-2 sm:gap-4 shrink-0">
+        {/* Chat Header with New + History */}
+        <div className="flex items-center justify-between shrink-0 px-1">
+          <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-[#00f7ff]/50 font-mono uppercase tracking-widest">
+            <MessageSquare size={10} className="text-[#00f7ff]/40" />
+            {currentConv?.title?.slice(0, 25) || 'Session'}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={startNewConversation} title="New Session"
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono text-[#00f7ff] border border-[#00f7ff]/25 hover:bg-[#00f7ff]/10 transition-colors">
+              <Plus size={10} /> NEW
+            </button>
+            <button onClick={() => setShowHistory(v => !v)} title="History"
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono border transition-colors ${showHistory ? 'text-[#00f7ff] border-[#00f7ff]/50 bg-[#00f7ff]/15' : 'text-[#00f7ff]/60 border-[#00f7ff]/20 hover:bg-[#00f7ff]/8'}`}>
+              <History size={10} />
+              {conversations.length > 1 && <span>{conversations.length}</span>}
+            </button>
+          </div>
+        </div>
         <div className="flex-1 jarvis-panel rounded-lg p-3 sm:p-4 overflow-y-auto jarvis-scrollbar flex flex-col gap-3">
           {messages.map((msg, idx) => (
             <div key={idx} className={`text-xs sm:text-sm ${msg.role === 'user' ? 'text-white text-right' : 'text-[#00f7ff] text-left'}`}>

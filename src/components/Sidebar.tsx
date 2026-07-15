@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppMode } from '../types';
-import { MessageSquare, Zap, Mic, MapPin, FileAudio, Volume2, Cpu, Code, Settings, TerminalSquare, Sparkles, Bot, LayoutDashboard } from 'lucide-react';
+import { MessageSquare, Zap, Mic, MapPin, FileAudio, Volume2, Cpu, Code, Settings, TerminalSquare, Sparkles, Bot, LayoutDashboard, History } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentMode, onModeChange }) =
 
   const modes: { id: AppMode | 'liquid-chat'; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+    { id: 'history', label: 'Chat History', icon: <History size={20} /> },
     { id: 'jarvis', label: 'J.A.R.V.I.S. HUD', icon: <Cpu size={20} /> },
     { id: 'coder', label: 'AI Coder IDE', icon: <Code size={20} /> },
     { id: 'liquid-chat', label: 'Liquid Chat', icon: <Sparkles size={20} /> },

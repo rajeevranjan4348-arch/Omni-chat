@@ -1,5 +1,6 @@
 export type AppMode = 
   | 'dashboard'
+  | 'history'
   | 'chat-pro'
   | 'chat-fast'
   | 'voice-live'

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Mic, Send, Code, Search, FileText, Zap, Brain, Eye, Upload, X, Loader, Sparkles, Star, Trash2, Copy, Volume2, VolumeX, Download, Plus, Pin, PinOff, Edit2, RefreshCw, Palette, BookOpen, ChevronRight, Check, CheckCheck, User, Bot, MoreHorizontal, Command, Maximize2, Minimize2, BarChart2, Activity, Quote, Play, Hash, Square, History, Clock, MessageSquare } from 'lucide-react';
+import { Mic, Send, Code, Search, FileText, Zap, Brain, Eye, Upload, X, Loader, Sparkles, Star, Trash2, Copy, Volume2, VolumeX, Download, Plus, Pin, PinOff, Edit2, RefreshCw, Palette, BookOpen, ChevronRight, Check, CheckCheck, User, Bot, MoreHorizontal, Command, Maximize2, Minimize2, BarChart2, Activity, Quote, Play, Hash, Square } from 'lucide-react';
 import { getAiInstance, transcribeAudio, generateSpeech } from '../services/gemini';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -314,25 +314,8 @@ export const LiquidChatMode: React.FC = () => {
     const newSession = { id: Date.now().toString(), name: 'New Session', messages: [], updatedAt: Date.now() };
     setSessions(prev => [newSession, ...prev]);
     setCurrentSession(newSession.id);
-    setShowHistory(false);
   };
 
-  const deleteSession = (id: string) => {
-    if (!window.confirm('Delete this conversation?')) return;
-    setSessions(prev => {
-      const updated = prev.filter(s => s.id !== id);
-      if (id === currentSession && updated.length > 0) setCurrentSession(updated[0].id);
-      else if (updated.length === 0) {
-        const fresh = { id: Date.now().toString(), name: 'New Session', messages: [], updatedAt: Date.now() };
-        setCurrentSession(fresh.id);
-        return [fresh];
-      }
-      return updated;
-    });
-  };
-
-  const [showHistory, setShowHistory] = useState(false);
-  const [historySearch, setHistorySearch] = useState('');
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle'|'thinking'|'speaking'|'listening'>('idle');
   const [mode, setMode] = useState('chat');
@@ -426,7 +409,7 @@ export const LiquidChatMode: React.FC = () => {
     try {
       const ai = getAiInstance();
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: input,
         config: {
           systemInstruction: activeMode.sys
@@ -530,9 +513,6 @@ export const LiquidChatMode: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button onClick={createNewSession} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', background: `rgba(255,255,255,0.05)`, border: `1px solid ${theme.a1}40`, color: theme.a1, fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> New
-          </button>
-          <button onClick={() => setShowHistory(v => !v)} title="Chat History" style={{ width: '36px', height: '36px', borderRadius: '10px', background: showHistory ? `${theme.a1}25` : 'rgba(255,255,255,0.05)', border: `1px solid ${showHistory ? theme.a1+'60' : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showHistory ? theme.a1 : 'rgba(255,255,255,0.7)', cursor: 'pointer', transition: 'all 0.2s' }}>
-            <History size={16} />
           </button>
           <button onClick={() => setShowCmd(true)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
             <Command size={16} />
@@ -667,75 +647,6 @@ export const LiquidChatMode: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* ── Right History Panel ── */}
-      {showHistory && (
-        <>
-          <div onClick={() => setShowHistory(false)} style={{ position: 'absolute', inset: 0, zIndex: 40 }} />
-          <div style={{ position: 'absolute', inset: '0 0 0 auto', width: '280px', zIndex: 50, display: 'flex', flexDirection: 'column', background: 'rgba(6,8,20,0.97)', borderLeft: `1px solid ${theme.a1}30`, backdropFilter: 'blur(24px)', animation: 'liquidHistIn 0.22s ease both' }}>
-            <style>{`@keyframes liquidHistIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }`}</style>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <History size={14} color={theme.a1} />
-                <span style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>History</span>
-                <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '20px', background: `${theme.a1}25`, color: theme.a1 }}>{sessions.length}</span>
-              </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button onClick={createNewSession} title="New Chat" style={{ width: '28px', height: '28px', borderRadius: '8px', background: `${theme.a1}18`, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.a1, cursor: 'pointer' }}>
-                  <Plus size={13} />
-                </button>
-                <button onClick={() => setShowHistory(false)} style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
-                  <X size={13} />
-                </button>
-              </div>
-            </div>
-            {/* Search */}
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <Search size={12} color="rgba(255,255,255,0.3)" />
-                <input type="text" value={historySearch} onChange={e => setHistorySearch(e.target.value)}
-                  placeholder="Search sessions…"
-                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: '12px', color: 'rgba(255,255,255,0.8)', fontFamily: 'inherit' }} />
-                {historySearch && <button onClick={() => setHistorySearch('')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}><X size={11} /></button>}
-              </div>
-            </div>
-            {/* List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', scrollbarWidth: 'thin' }}>
-              {sessions.filter(s => s.name.toLowerCase().includes(historySearch.toLowerCase())).length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80px', gap: '6px', color: 'rgba(255,255,255,0.2)', fontSize: '12px' }}>
-                  <MessageSquare size={20} /><span>{historySearch ? 'No matches' : 'No sessions yet'}</span>
-                </div>
-              ) : sessions.filter(s => s.name.toLowerCase().includes(historySearch.toLowerCase())).map(session => (
-                <div key={session.id} onClick={() => { setCurrentSession(session.id); setShowHistory(false); }}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px', borderRadius: '12px', cursor: 'pointer', border: `1px solid ${session.id === currentSession ? theme.a1 + '40' : 'transparent'}`, background: session.id === currentSession ? `${theme.a1}12` : 'transparent', marginBottom: '2px', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { if (session.id !== currentSession) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
-                  onMouseLeave={e => { if (session.id !== currentSession) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
-                  <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: `${theme.a1}18`, border: `1px solid ${theme.a1}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <MessageSquare size={13} color={theme.a1} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.85)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.name}</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-                      <Clock size={9} color="rgba(255,255,255,0.2)" />
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>{new Date(session.updatedAt).toLocaleDateString()}</span>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>· {(session.messages || []).length} msgs</span>
-                    </div>
-                  </div>
-                  <button onClick={e => { e.stopPropagation(); deleteSession(session.id); }}
-                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: '2px', borderRadius: '6px', display: 'flex', alignItems: 'center' }}
-                    title="Delete">
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div style={{ padding: '10px', textAlign: 'center', fontSize: '10px', color: 'rgba(255,255,255,0.2)', borderTop: '1px solid rgba(255,255,255,0.06)', fontFamily: 'monospace' }}>
-              {sessions.length} session{sessions.length !== 1 ? 's' : ''} saved
-            </div>
-          </div>
-        </>
-      )}
 
       {showCmd && <CmdPalette theme={theme} onAction={handleAction} onClose={() => setShowCmd(false)} sessions={sessions} setSession={setCurrentSession} setMode={setMode} />}
     </div>

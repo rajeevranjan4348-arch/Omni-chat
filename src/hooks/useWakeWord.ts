@@ -70,42 +70,68 @@ export const useWakeWord = (
       }
     };
 
+    let isMounted = true;
+
     recognition.onerror = (event: any) => {
-      if (event.error !== 'no-speech') {
-        if (event.error === 'not-allowed') {
-          // If not allowed, stop trying to auto-restart and don't spam console
-          recognition.onend = null;
-          setIsListeningForWakeWord(false);
-          console.warn('Wake word recognition blocked by browser (not-allowed). User must grant microphone permission.');
-        } else {
-          console.error('Wake word recognition error:', event.error);
-        }
+      // 'no-speech' and 'aborted' are normal lifecycle events (e.g. pauses, user speaking stopping, or mode changes)
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        return;
       }
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        // If microphone permission is not granted, stop trying to auto-restart cleanly
+        recognition.onend = null;
+        if (isMounted) setIsListeningForWakeWord(false);
+        console.warn('Wake word microphone access not allowed or pending user grant.');
+        return;
+      }
+
+      if (event.error === 'network') {
+        // Transient network hiccup with speech recognition service
+        return;
+      }
+
+      console.warn('Wake word recognition event:', event.error);
     };
 
+    let restartTimer: any = null;
+
     recognition.onend = () => {
+      if (!isMounted) return;
       setIsListeningForWakeWord(false);
-      // Automatically restart listening for wake word
-      try {
-        if (recognition.onend) {
-          recognition.start();
+      // Automatically restart listening for wake word with a small delay to prevent rapid looping
+      clearTimeout(restartTimer);
+      restartTimer = setTimeout(() => {
+        if (!isMounted) return;
+        try {
+          if (recognitionRef.current) {
+            recognitionRef.current.start();
+          }
+        } catch {
+          // Ignore if already started or busy
         }
-      } catch (e) {
-        // Ignore if already started
-      }
+      }, 400);
     };
 
     try {
       recognition.start();
       recognitionRef.current = recognition;
-    } catch (e) {
-      console.error('Failed to start wake word detection:', e);
+    } catch {
+      // Ignore start failure
     }
 
     return () => {
+      isMounted = false;
+      clearTimeout(restartTimer);
       if (recognitionRef.current) {
         recognitionRef.current.onend = null; // Prevent auto-restart on unmount
-        recognitionRef.current.stop();
+        recognitionRef.current.onerror = null;
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // Ignore
+        }
+        recognitionRef.current = null;
       }
     };
   }, [onWakeWordDetected, hasInteracted, wakeWords, sensitivity]);

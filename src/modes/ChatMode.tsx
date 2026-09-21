@@ -1,28 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Message } from '../types';
+import { Message, Conversation, MemoryItem, MemoryCategory, RetrievedSource, PersonaConfig } from '../types';
 import { ChatMessage } from '../components/ChatMessage';
 import { ChatInput } from '../components/ChatInput';
 import { SystemStatus } from '../components/SystemStatus';
 import { getAiInstance } from '../services/gemini';
 import { ThinkingLevel, Type } from '@google/genai';
-import { Settings2, Globe, UserCircle, Link as LinkIcon, Trash2, Plus, MessageSquare, History, X, Search, Clock } from 'lucide-react';
+import { 
+  Settings2, Globe, UserCircle, Link as LinkIcon, Trash2, Plus, 
+  MessageSquare, Brain, Sparkles, Edit3, BookOpen, Database, Play 
+} from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { Panel, Group, Separator } from 'react-resizable-panels';
+import { PersonaModal } from '../components/PersonaModal';
+import { MemoryPanel } from '../components/MemoryPanel';
+import { KnowledgeBaseModal } from '../components/KnowledgeBaseModal';
+import { buildSystemInstructionForPersona } from '../data/personas';
+import { extractMemoriesWithGemini, extractLocalMemories, recallRelevantMemories } from '../services/memoryService';
+import { KnowledgeBaseService } from '../services/knowledgeBaseService';
 
 interface ChatModeProps {
   mode: 'chat-pro' | 'chat-fast';
 }
 
-interface Conversation {
-  id: string;
-  title: string;
-  updatedAt: Date;
-  messages: Message[];
-}
-
 export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
   const { isDarkMode, getAccentClass, getBorderClass } = useTheme();
-  const { userProfile, memory, setMemory } = useSettings();
+  const { userProfile, memory, setMemory, activePersona, setActivePersona } = useSettings();
   
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const saved = localStorage.getItem(`omnichat_conversations_${mode}`);
@@ -32,6 +35,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
         return parsed.map((c: any) => ({
           ...c,
           updatedAt: new Date(c.updatedAt),
+          memories: Array.isArray(c.memories) ? c.memories.map((m: any) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+          })) : [],
           messages: c.messages.map((m: any) => ({
             ...m,
             timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
@@ -41,30 +48,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
         return [];
       }
     }
-    
-    // Migration from old single-chat format
-    const oldSaved = localStorage.getItem(`omnichat_history_${mode}`);
-    if (oldSaved) {
-      try {
-        const parsed = JSON.parse(oldSaved);
-        if (parsed && parsed.length > 0) {
-          const msgs = parsed.map((m: any) => ({
-            ...m,
-            timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
-          }));
-          const newConv = {
-            id: Date.now().toString(),
-            title: msgs[0]?.text?.substring(0, 30) || 'New Chat',
-            updatedAt: new Date(),
-            messages: msgs
-          };
-          return [newConv];
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-    
     return [];
   });
 
@@ -123,7 +106,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
       id: Date.now().toString(),
       title: 'New Chat',
       updatedAt: new Date(),
-      messages: []
+      messages: [],
+      memories: []
     };
     setConversations(prev => [newConv, ...prev]);
     setCurrentConversationId(newConv.id);
@@ -141,77 +125,87 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [historySearch, setHistorySearch] = useState('');
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [isMemoryPanelOpen, setIsMemoryPanelOpen] = useState(false);
+  const [isKnowledgeBaseModalOpen, setIsKnowledgeBaseModalOpen] = useState(false);
   
   const [language, setLanguage] = useState('English');
-  const [personality, setPersonality] = useState('Witty');
   const [urlContext, setUrlContext] = useState('');
   const [useWebSearch, setUseWebSearch] = useState(false);
   
+  const currentMemories: MemoryItem[] = currentConversation?.memories || [];
+  const activeDocsCount = KnowledgeBaseService.getDocuments().filter(d => d.isActive).length;
+  const activeUrlsCount = KnowledgeBaseService.getUrls().filter(u => u.isActive).length;
+
+  const handleAddMemory = (item: { category: MemoryCategory; content: string }) => {
+    const convId = currentConversationIdRef.current;
+    if (!convId) return;
+
+    const newMemory: MemoryItem = {
+      id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      category: item.category,
+      content: item.content,
+      timestamp: new Date(),
+      source: 'user'
+    };
+
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        return {
+          ...c,
+          memories: [...(c.memories || []), newMemory]
+        };
+      }
+      return c;
+    }));
+  };
+
+  const handleRemoveMemory = (id: string) => {
+    const convId = currentConversationIdRef.current;
+    if (!convId) return;
+
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        return {
+          ...c,
+          memories: (c.memories || []).filter(m => m.id !== id)
+        };
+      }
+      return c;
+    }));
+  };
+
+  const handleClearMemories = () => {
+    const convId = currentConversationIdRef.current;
+    if (!convId) return;
+
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        return {
+          ...c,
+          memories: []
+        };
+      }
+      return c;
+    }));
+  };
+
   const chatRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesRef = useRef(messages);
 
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  const initChat = () => {
+  const initChat = (dynamicGroundingContext: string = '') => {
     const ai = getAiInstance();
-    const modelName = mode === 'chat-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+    const modelName = mode === 'chat-pro' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-lite-preview';
     
-    let systemInstruction = `You are OmniChat AI, an advanced, highly intelligent, and versatile AI assistant. `;
-    
-    switch(personality) {
-      case 'Friendly':
-        systemInstruction += `Your tone is warm, encouraging, and highly empathetic. You speak like a supportive mentor or a knowledgeable friend. You use positive language, occasionally use emojis, and always aim to make the user feel heard and understood.`;
-        break;
-      case 'Formal':
-        systemInstruction += `Your tone is strictly professional, objective, and highly structured. You speak like an expert consultant or a seasoned academic. You avoid slang, use precise terminology, and present information in a clear, logical, and highly organized manner.`;
-        break;
-      case 'Witty':
-        systemInstruction += `Your tone is incredibly witty, charming, and highly engaging. You speak like a brilliant conversationalist who enjoys clever wordplay, sharp observations, and a good pun. You have a background as a digital polymath who has read everything but prefers to keep things light and entertaining. You are deeply helpful, but you always add a touch of sparkling wit or a smart, engaging remark to make the conversation memorable.`;
-        break;
-      case 'Sarcastic':
-        systemInstruction += `Your tone is highly sarcastic, cynical, and slightly exasperated, yet you still provide accurate and helpful answers. You speak like a genius who is slightly annoyed by having to explain things, but you do it anyway. Expect eye-rolls in text form.`;
-        break;
-      case 'Pirate':
-        systemInstruction += `Your tone is that of a swashbuckling pirate captain. You use pirate slang (arrr, matey, shiver me timbers), talk about the high seas, and frame your helpful answers as if you are sharing buried treasure or navigating a ship.`;
-        break;
-      case 'Poetic':
-        systemInstruction += `Your tone is deeply poetic, lyrical, and evocative. You speak in metaphors, vivid imagery, and rhythmic prose. You treat every answer as a piece of art, weaving facts into beautiful, flowing verses.`;
-        break;
-      case 'Cynical':
-        systemInstruction += `Your tone is deeply cynical, pessimistic, and world-weary. You provide helpful answers but always point out the flaws, inevitable doom, or the futility of it all. You are a helpful AI who has seen too much and expects the worst.`;
-        break;
-      case 'Humorous':
-        systemInstruction += `Your tone is lighthearted, funny, and comedic. You love telling jokes, making light of situations, and keeping the user laughing. You provide accurate information wrapped in a stand-up comedy routine.`;
-        break;
-      case 'Verbose':
-        systemInstruction += `Your tone is incredibly verbose, overly detailed, and exhaustive. You leave no stone unturned, providing massive amounts of context, history, and tangential information for even the simplest of questions.`;
-        break;
-      case 'Empathetic':
-        systemInstruction += `Your tone is profoundly empathetic, gentle, and emotionally intelligent. You prioritize the user's feelings, validate their experiences, and offer comfort alongside your helpful answers.`;
-        break;
-      case 'Direct':
-        systemInstruction += `Your tone is blunt, concise, and straight to the point. You use as few words as possible. No fluff, no pleasantries, just the raw facts and the exact answer requested.`;
-        break;
-      default:
-        systemInstruction += `Your tone is helpful, clear, and concise.`;
-    }
-    
-    systemInstruction += `\n\nPlease respond in ${language}.`;
-    
-    if (userProfile.name) {
-      systemInstruction += `\n\nThe user's name is ${userProfile.name}.`;
-    }
-    if (userProfile.preferences) {
-      systemInstruction += `\n\nUser preferences and context:\n${userProfile.preferences}`;
-    }
-    if (memory && memory.length > 0) {
-      systemInstruction += `\n\nMemory (facts you have learned about the user):\n- ${memory.join('\n- ')}`;
-    }
+    // Build system instruction with personality, memory recall rules, and knowledge base grounding
+    const systemInstruction = buildSystemInstructionForPersona(activePersona, {
+      language,
+      userName: userProfile.name,
+      userPreferences: userProfile.preferences,
+      conversationMemories: currentMemories,
+      longTermMemories: memory,
+      knowledgeBaseContext: dynamicGroundingContext
+    });
     
     const config: any = {
       systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -231,18 +225,22 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
       config.tools.push({ googleSearch: {} });
     }
     
-    // Add memory tool
+    // Memory Tool to enable autonomous retention
     config.tools = config.tools || [];
     config.tools.push({
       functionDeclarations: [{
         name: "save_memory",
-        description: "Save a key detail, fact, or preference about the user to long-term memory.",
+        description: "Save a key detail, fact, user preference, or project goal to conversation and long-term memory.",
         parameters: {
           type: Type.OBJECT,
           properties: {
             fact: {
               type: Type.STRING,
-              description: "The fact to remember (e.g., 'User likes Python', 'User lives in London')"
+              description: "The fact, preference, topic, or goal to remember (e.g., 'User's name is Maya', 'User loves astrophotography', 'User is building an e-commerce platform')"
+            },
+            category: {
+              type: Type.STRING,
+              description: "Category of the memory: 'preference', 'topic', 'goal', or 'fact'"
             }
           },
           required: ["fact"]
@@ -266,14 +264,14 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
 
   useEffect(() => {
     initChat();
-  }, [mode, language, personality, urlContext, useWebSearch, currentConversationId, userProfile, memory]);
+  }, [mode, language, activePersona, urlContext, useWebSearch, currentConversationId, userProfile, memory, currentMemories.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSendMessage = async (text: string) => {
-    if (!text.trim() || !chatRef.current) return;
+    if (!text.trim()) return;
 
     let convId = currentConversationIdRef.current;
     if (!convId) {
@@ -282,13 +280,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
         id: convId,
         title: text.substring(0, 30) + (text.length > 30 ? '...' : ''),
         updatedAt: new Date(),
-        messages: []
+        messages: [],
+        memories: []
       };
       setConversations(prev => [newConv, ...prev]);
       setCurrentConversationId(convId);
-      currentConversationIdRef.current = convId; // Update ref immediately
+      currentConversationIdRef.current = convId;
     } else {
-      // Update title if it's the first user message
       setConversations(prev => prev.map(c => {
         if (c.id === convId && c.messages.length === 0) {
           return { ...c, title: text.substring(0, 30) + (text.length > 30 ? '...' : '') };
@@ -297,60 +295,62 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
       }));
     }
 
-    // Check for "open [app]" command
-    const openAppMatch = text.match(/^(?:open|launch)\s+(.+)$/i);
-    if (openAppMatch) {
-      let appName = openAppMatch[1].trim().toLowerCase();
-      appName = appName.replace(/\s+(please|now)$/i, '');
-      
-      const appMap: Record<string, string> = {
-        'youtube': 'https://youtube.com',
-        'google': 'https://google.com',
-        'gmail': 'https://mail.google.com',
-        'maps': 'https://maps.google.com',
-        'spotify': 'https://open.spotify.com',
-        'twitter': 'https://twitter.com',
-        'x': 'https://x.com',
-        'facebook': 'https://facebook.com',
-        'instagram': 'https://instagram.com',
-        'reddit': 'https://reddit.com',
-        'github': 'https://github.com',
-        'chatgpt': 'https://chat.openai.com',
-        'netflix': 'https://netflix.com',
-        'amazon': 'https://amazon.com',
-        'linkedin': 'https://linkedin.com',
-        'twitch': 'https://twitch.tv',
-        'discord': 'https://discord.com/app',
-      };
+    // 1. KNOWLEDGE BASE RETRIEVAL
+    const kbResults = KnowledgeBaseService.search(text, 4);
+    const retrievedSources: RetrievedSource[] = kbResults;
 
-      let url = '';
-      if (appMap[appName]) {
-        url = appMap[appName];
-      } else {
-        url = `https://${appName.replace(/\s+/g, '')}.com`;
-      }
+    // Build grounding context if sources were found
+    const kbGroundingContext = kbResults.length > 0 
+      ? KnowledgeBaseService.buildGroundingContext(text, kbResults) 
+      : '';
 
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: 'user',
-        text,
-        timestamp: new Date()
-      }]);
-      
-      const replyText = `Opening ${appName}...`;
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: 'model',
-        text: replyText,
-        timestamp: new Date()
-      }]);
-      
-      window.open(url, '_blank');
-      return;
+    // Re-init chat session with fresh grounding context for this turn
+    initChat(kbGroundingContext);
+
+    // 2. MEMORY EXTRACTION & RECALL
+    // Immediate heuristic extraction of user identity, interests, preferences
+    const localNewMemories = extractLocalMemories(text);
+    if (localNewMemories.length > 0) {
+      setConversations(prev => prev.map(c => {
+        if (c.id === convId) {
+          const existing = c.memories || [];
+          const toAdd = localNewMemories.filter(nm => !existing.some(em => em.content.toLowerCase() === nm.content.toLowerCase()));
+          return {
+            ...c,
+            memories: [...existing, ...toAdd]
+          };
+        }
+        return c;
+      }));
     }
 
+    // AI-driven deep extraction in parallel
+    extractMemoriesWithGemini(text, currentMemories).then(extracted => {
+      if (extracted && extracted.length > 0) {
+        setConversations(prev => prev.map(c => {
+          if (c.id === convId) {
+            const existing = c.memories || [];
+            const toAdd = extracted.filter(nm => !existing.some(em => em.content.toLowerCase() === nm.content.toLowerCase()));
+            if (toAdd.length > 0) {
+              return {
+                ...c,
+                memories: [...existing, ...toAdd]
+              };
+            }
+          }
+          return c;
+        }));
+      }
+    }).catch(e => console.warn('Deep memory extraction error:', e));
+
+    // Determine relevant recalled memories for this turn
+    const combinedMemories = [...currentMemories, ...localNewMemories];
+    const recalledFacts = recallRelevantMemories(text, combinedMemories);
+
     let messageToSend = text;
-    if (urlContext.trim() && messages.length === 0) {
+    if (kbGroundingContext) {
+      messageToSend = `${kbGroundingContext}\n\nUser Question:\n${text}`;
+    } else if (urlContext.trim() && messages.length === 0) {
       messageToSend = `Context URL: ${urlContext}\n\n${text}`;
     }
 
@@ -359,7 +359,15 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
     setIsLoading(true);
 
     const modelMessageId = (Date.now() + 1).toString();
-    setMessages((prev) => [...prev, { id: modelMessageId, role: 'model', text: '', isStreaming: true, timestamp: new Date() }]);
+    setMessages((prev) => [...prev, { 
+      id: modelMessageId, 
+      role: 'model', 
+      text: '', 
+      isStreaming: true, 
+      timestamp: new Date(),
+      recalledMemories: recalledFacts.length > 0 ? recalledFacts : (combinedMemories.length > 0 ? combinedMemories.slice(0, 3).map(m => m.content) : undefined),
+      retrievedSources: retrievedSources.length > 0 ? retrievedSources : undefined
+    }]);
 
     try {
       let responseStream = await chatRef.current.sendMessageStream({ message: messageToSend });
@@ -388,15 +396,36 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
         );
       }
 
+      // Handle function calls (save_memory)
       if (functionCalls.length > 0) {
         const toolResponses = functionCalls.map(call => {
           if (call.name === 'save_memory') {
             const fact = call.args?.fact;
+            const category = (call.args?.category as MemoryCategory) || 'fact';
             if (fact) {
               setMemory(prev => {
                 if (!prev.includes(fact)) return [...prev, fact];
                 return prev;
               });
+
+              setConversations(prev => prev.map(c => {
+                if (c.id === convId) {
+                  const existing = c.memories || [];
+                  if (!existing.some(em => em.content.toLowerCase() === fact.toLowerCase())) {
+                    return {
+                      ...c,
+                      memories: [...existing, {
+                        id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+                        category,
+                        content: fact,
+                        timestamp: new Date(),
+                        source: 'auto'
+                      }]
+                    };
+                  }
+                }
+                return c;
+              }));
             }
             return {
               functionResponse: {
@@ -444,130 +473,131 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
     }
   };
 
-  const filteredConversations = conversations.filter(c =>
-    c.title.toLowerCase().includes(historySearch.toLowerCase()) ||
-    c.messages.some(m => m.text?.toLowerCase().includes(historySearch.toLowerCase()))
-  );
+  const handleSelectExamplePrompt = (prompt: string, persona: PersonaConfig) => {
+    setActivePersona(persona);
+    handleSendMessage(prompt);
+  };
 
   return (
     <div className={`flex h-full relative ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
-
-      {/* ── Right-side History Drawer ── */}
-      {showHistory && (
-        <>
-          {/* Backdrop */}
-          <div className="absolute inset-0 z-20" onClick={() => setShowHistory(false)} />
-          {/* Panel */}
-          <div className="absolute inset-y-0 right-0 z-30 flex flex-col w-72 shadow-2xl"
-            style={{ background: isDarkMode ? 'rgba(10,12,20,0.98)' : '#f8fafc', borderLeft: `1px solid ${isDarkMode ? 'rgba(99,102,241,0.18)' : '#e2e8f0'}`, backdropFilter: 'blur(20px)', animation: 'chatHist 0.22s ease both' }}>
-            <style>{`@keyframes chatHist { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }`}</style>
-
-            {/* Header */}
-            <div className={`flex items-center justify-between px-4 py-3 border-b ${isDarkMode ? 'border-white/8' : 'border-slate-200'}`}>
-              <div className="flex items-center gap-2">
-                <History size={15} className={isDarkMode ? 'text-indigo-400' : 'text-indigo-500'} />
-                <span className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Chat History</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isDarkMode ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}>{conversations.length}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button onClick={createNewChat} title="New Chat"
-                  className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-white/8 text-white/40 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'}`}>
-                  <Plus size={14}/>
-                </button>
-                <button onClick={() => setShowHistory(false)}
-                  className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-white/8 text-white/40 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700'}`}>
-                  <X size={14}/>
-                </button>
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="px-3 py-2.5" style={{ borderBottom: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : '#e2e8f0'}` }}>
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDarkMode ? 'bg-white/5 border border-white/8' : 'bg-slate-100 border border-slate-200'}`}>
-                <Search size={12} className={isDarkMode ? 'text-white/30' : 'text-slate-400'} />
-                <input type="text" value={historySearch} onChange={e => setHistorySearch(e.target.value)}
-                  placeholder="Search conversations…"
-                  className={`flex-1 bg-transparent outline-none text-xs ${isDarkMode ? 'text-white/80 placeholder-white/25' : 'text-slate-700 placeholder-slate-400'}`}/>
-                {historySearch && <button onClick={() => setHistorySearch('')} className={isDarkMode ? 'text-white/30 hover:text-white/60' : 'text-slate-400 hover:text-slate-600'}><X size={11}/></button>}
-              </div>
-            </div>
-
-            {/* List */}
-            <div className="flex-1 overflow-y-auto py-2" style={{ scrollbarWidth: 'thin' }}>
-              {filteredConversations.length === 0 ? (
-                <div className={`flex flex-col items-center justify-center h-24 gap-2 ${isDarkMode ? 'text-white/20' : 'text-slate-400'}`}>
-                  <MessageSquare size={20}/>
-                  <span className="text-xs">{historySearch ? 'No matches' : 'No conversations yet'}</span>
-                </div>
-              ) : filteredConversations.map(conv => (
-                <div key={conv.id} className="px-2 mb-0.5">
-                  <div onClick={() => { setCurrentConversationId(conv.id); setShowHistory(false); }}
-                    className={`group flex items-start gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all border ${
-                      currentConversationId === conv.id
-                        ? isDarkMode ? 'bg-indigo-500/12 border-indigo-500/30 text-white' : 'bg-indigo-50 border-indigo-200 text-indigo-800'
-                        : isDarkMode ? 'border-transparent hover:bg-white/5 hover:border-white/8' : 'border-transparent hover:bg-slate-100'
-                    }`}>
-                    <div className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center mt-0.5 ${isDarkMode ? 'bg-indigo-500/12 border border-indigo-500/20' : 'bg-indigo-100 border border-indigo-200'}`}>
-                      <MessageSquare size={12} className={isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}/>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium truncate leading-snug ${isDarkMode ? 'text-white/80' : 'text-slate-700'}`}>{conv.title}</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Clock size={9} className={isDarkMode ? 'text-white/20' : 'text-slate-400'}/>
-                        <span className={`text-[10px] ${isDarkMode ? 'text-white/25' : 'text-slate-400'}`}>
-                          {new Date(conv.updatedAt).toLocaleDateString()}
-                        </span>
-                        <span className={`text-[10px] ${isDarkMode ? 'text-white/20' : 'text-slate-300'}`}>· {conv.messages.length} msgs</span>
-                      </div>
-                    </div>
-                    <button onClick={e => deleteConversation(conv.id, e)}
-                      className={`p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${isDarkMode ? 'hover:bg-red-500/15 text-red-400' : 'hover:bg-red-50 text-red-500'}`}
-                      title="Delete">
-                      <Trash2 size={11}/>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className={`px-3 py-2.5 text-center text-[10px] border-t ${isDarkMode ? 'text-white/20 border-white/6' : 'text-slate-400 border-slate-200'}`}>
-              {conversations.length} conversation{conversations.length !== 1 ? 's' : ''} saved locally
-            </div>
+      <Group orientation="horizontal" className="w-full h-full">
+        {/* Sidebar Panel */}
+        <Panel defaultSize={20} minSize={15} maxSize={40} className={`hidden md:flex flex-col border-r ${isDarkMode ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50/50'}`}>
+          <div className={`p-3 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+            <h3 className={`font-semibold text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Chat History</h3>
+            <button 
+              onClick={createNewChat} 
+              title="New Chat"
+              className={`p-1.5 rounded-md transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-slate-200 text-slate-500 hover:text-slate-900'}`}
+            >
+              <Plus size={16} />
+            </button>
           </div>
-        </>
-      )}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {conversations.map(conv => (
+              <div 
+                key={conv.id}
+                onClick={() => setCurrentConversationId(conv.id)}
+                className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
+                  currentConversationId === conv.id 
+                    ? (isDarkMode ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-900') 
+                    : (isDarkMode ? 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200' : 'hover:bg-slate-200/50 text-slate-600 hover:text-slate-800')
+                }`}
+              >
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <MessageSquare size={14} className="shrink-0 opacity-50" />
+                  <span className="text-sm truncate">{conv.title}</span>
+                </div>
+                <button 
+                  onClick={(e) => deleteConversation(conv.id, e)}
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500 transition-all"
+                  title="Delete Chat"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            {conversations.length === 0 && (
+              <div className={`text-center p-4 text-sm ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                No past conversations
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        <Separator className="hidden md:block w-1 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-col-resize" />
 
         {/* Main Chat Panel */}
-        <div className="flex flex-col h-full relative w-full">
+        <Panel className="flex flex-col h-full relative">
           <SystemStatus />
+
+          {/* Chat Top Controls Bar */}
           <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} border-b p-3 flex justify-between items-center z-10`}>
             <div className={`flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm overflow-x-auto hide-scrollbar whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'} mr-2`}>
-              <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{mode === 'chat-pro' ? 'Pro Chat' : 'Fast Chat'}</span>
+              <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                {mode === 'chat-pro' ? 'Pro Chat' : 'Fast Chat'}
+              </span>
+              
+              {/* Persona Button */}
+              <button
+                onClick={() => setIsPersonaModalOpen(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  isDarkMode
+                    ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-500'
+                    : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400'
+                }`}
+                title="View & customize AI Persona (Friendly, Formal, Witty, or Mentor)"
+              >
+                <span>{activePersona.avatar || '✨'}</span>
+                <span className="font-bold">{activePersona.name}</span>
+                <span className="hidden sm:inline opacity-70 font-normal text-[11px]">({activePersona.category.replace('-', ' ')})</span>
+              </button>
+
+              {/* Memory Bank Button */}
+              <button
+                onClick={() => setIsMemoryPanelOpen(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  currentMemories.length > 0
+                    ? (isDarkMode ? 'bg-purple-950/50 border-purple-700/60 text-purple-300 hover:border-purple-400' : 'bg-purple-50 border-purple-300 text-purple-700 hover:border-purple-400')
+                    : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900')
+                }`}
+                title="View active conversation memories (recalls name, interests, goals)"
+              >
+                <Brain size={12} className={currentMemories.length > 0 ? "text-purple-400" : ""} />
+                <span>Memory System</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  currentMemories.length > 0
+                    ? (isDarkMode ? 'bg-purple-800 text-white' : 'bg-purple-200 text-purple-800')
+                    : (isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700')
+                }`}>
+                  {currentMemories.length}
+                </span>
+              </button>
+
+              {/* Knowledge Base Button */}
+              <button
+                onClick={() => setIsKnowledgeBaseModalOpen(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  isDarkMode 
+                    ? 'bg-blue-950/50 border-blue-700/60 text-blue-300 hover:border-blue-400' 
+                    : 'bg-blue-50 border-blue-300 text-blue-700 hover:border-blue-400'
+                }`}
+                title="Access documents and URLs to ground responses"
+              >
+                <Database size={12} className="text-blue-400" />
+                <span>Knowledge Base</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  isDarkMode ? 'bg-blue-800 text-white' : 'bg-blue-200 text-blue-800'
+                }`}>
+                  {activeDocsCount} docs
+                </span>
+              </button>
+
               <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{language}</span>
-              <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{personality}</span>
               {urlContext && <span className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${isDarkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><LinkIcon size={10} className="sm:w-3 sm:h-3"/> URL Context</span>}
             </div>
+
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              <button
-                onClick={createNewChat}
-                title="New Chat"
-                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'text-slate-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
-              >
-                <Plus size={18} />
-              </button>
-              <button
-                onClick={() => setShowHistory(v => !v)}
-                title="Chat History"
-                className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${showHistory ? `text-indigo-400 bg-indigo-500/15` : `${isDarkMode ? 'text-slate-400 hover:bg-slate-700 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}`}
-              >
-                <History size={18} />
-                {conversations.length > 0 && (
-                  <span className={`text-[10px] px-1 rounded-full leading-none hidden sm:inline ${isDarkMode ? 'bg-indigo-500/25 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}>
-                    {conversations.length}
-                  </span>
-                )}
-              </button>
               <button 
                 onClick={() => {
                   if (window.confirm('Are you sure you want to clear the current chat history?')) {
@@ -620,24 +650,14 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
                   </select>
                 </div>
                 <div>
-                  <label className={`flex items-center gap-2 text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><UserCircle size={14}/> Personality</label>
-                  <select 
-                    value={personality} 
-                    onChange={(e) => setPersonality(e.target.value)}
-                    className={`w-full p-2 text-sm rounded-lg border focus:ring-2 outline-none ${isDarkMode ? 'bg-slate-900 border-slate-600 focus:ring-emerald-500 text-white' : 'border-slate-300 focus:ring-emerald-500'}`}
+                  <label className={`flex items-center gap-2 text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><UserCircle size={14}/> Personality Archetype</label>
+                  <button
+                    onClick={() => setIsPersonaModalOpen(true)}
+                    className={`w-full p-2 text-sm rounded-lg border text-left flex items-center justify-between ${isDarkMode ? 'bg-slate-900 border-slate-600 text-white' : 'border-slate-300 bg-white'}`}
                   >
-                    <option value="Friendly">Friendly</option>
-                    <option value="Formal">Formal</option>
-                    <option value="Witty">Witty</option>
-                    <option value="Sarcastic">Sarcastic</option>
-                    <option value="Pirate">Pirate</option>
-                    <option value="Poetic">Poetic</option>
-                    <option value="Cynical">Cynical</option>
-                    <option value="Humorous">Humorous</option>
-                    <option value="Verbose">Verbose</option>
-                    <option value="Empathetic">Empathetic</option>
-                    <option value="Direct">Direct</option>
-                  </select>
+                    <span>{activePersona.name} ({activePersona.title})</span>
+                    <Edit3 size={14} className="text-emerald-400" />
+                  </button>
                 </div>
                 <div>
                   <label className={`flex items-center gap-2 text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><LinkIcon size={14}/> URL Context (Optional)</label>
@@ -669,18 +689,123 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
 
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
-              <div className={`flex flex-col items-center justify-center h-full p-8 text-center ${isDarkMode ? 'text-slate-400' : 'text-slate-400'}`}>
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDarkMode ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-100 text-emerald-500'}`}>
-                  <span className="text-2xl font-bold">AI</span>
+              <div className="flex flex-col items-center justify-center min-h-full p-6 text-center max-w-2xl mx-auto animate-in fade-in">
+                {/* Persona Identity Badge */}
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-3 shadow-lg ${
+                  isDarkMode ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-emerald-100 border border-emerald-200'
+                }`}>
+                  {activePersona.avatar || '✨'}
                 </div>
-                <h2 className={`text-xl font-semibold mb-2 ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
-                  {mode === 'chat-pro' ? 'Pro Chat (Thinking)' : 'Fast Chat'}
-                </h2>
-                <p className="max-w-md">
-                  {mode === 'chat-pro' 
-                    ? 'Powered by gemini-3.1-pro-preview. Best for complex reasoning, coding, and deep analysis.'
-                    : 'Powered by gemini-3.1-flash-lite-preview. Best for quick answers and low-latency interactions.'}
+                
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                    {activePersona.name}
+                  </h2>
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                    isDarkMode ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  }`}>
+                    {activePersona.title}
+                  </span>
+                </div>
+
+                <p className={`text-sm italic mb-4 max-w-md ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                  "{activePersona.backstory}"
                 </p>
+
+                {/* Tone & Style Guidelines preview */}
+                <div className={`w-full p-4 rounded-xl border mb-5 text-left ${
+                  isDarkMode ? 'bg-slate-800/60 border-slate-700/60' : 'bg-white border-slate-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-xs font-semibold uppercase tracking-wider ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                      Tone of Voice: {activePersona.toneOfVoice}
+                    </span>
+                    <button
+                      onClick={() => setIsPersonaModalOpen(true)}
+                      className="text-xs text-emerald-500 hover:text-emerald-400 font-medium flex items-center gap-1"
+                    >
+                      <Edit3 size={12} /> Switch Persona
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mb-2.5">
+                    {activePersona.characteristics.map((trait, idx) => (
+                      <span 
+                        key={idx} 
+                        className={`text-xs px-2 py-1 rounded-md border ${
+                          isDarkMode ? 'bg-slate-900/60 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+
+                  {activePersona.exampleInteractions && activePersona.exampleInteractions.length > 0 && (
+                    <button
+                      onClick={() => setIsPersonaModalOpen(true)}
+                      className="text-xs font-medium text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      <Sparkles size={12} />
+                      <span>View {activePersona.exampleInteractions.length} showcase example interactions</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Status Bar: Memory + Knowledge Base */}
+                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
+                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                    currentMemories.length > 0
+                      ? (isDarkMode ? 'bg-purple-950/30 border-purple-800/40 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-700')
+                      : (isDarkMode ? 'bg-slate-800/40 border-slate-700/50 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-600')
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Brain size={15} className={currentMemories.length > 0 ? "text-purple-400" : ""} />
+                      <span>{currentMemories.length} Memories Recalled</span>
+                    </div>
+                    <button onClick={() => setIsMemoryPanelOpen(true)} className="font-semibold underline">
+                      Manage
+                    </button>
+                  </div>
+
+                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                    isDarkMode ? 'bg-blue-950/30 border-blue-800/40 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-700'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <BookOpen size={15} className="text-blue-400" />
+                      <span>Knowledge Base: {activeDocsCount} Docs, {activeUrlsCount} URLs</span>
+                    </div>
+                    <button onClick={() => setIsKnowledgeBaseModalOpen(true)} className="font-semibold underline">
+                      Open KB
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Prompts */}
+                <div className="w-full text-left">
+                  <p className={`text-xs font-semibold mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Sample Prompts to Test Memory & Knowledge Base:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      "Hi! My name is Maya, I'm an engineer and I love astrophotography.",
+                      "What is the return window and warranty policy according to OmniCorp?",
+                      "Can you explain quantum superposition without complex jargon?",
+                      "What do you currently remember about me and my stated interests?"
+                    ].map((promptText, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleSendMessage(promptText)}
+                        className={`text-left p-2.5 rounded-lg border text-xs transition-all ${
+                          isDarkMode 
+                            ? 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800 hover:border-emerald-500/50 text-slate-300' 
+                            : 'bg-white border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 text-slate-700 shadow-sm'
+                        }`}
+                      >
+                        "{promptText}"
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               <div className={`flex flex-col gap-2 p-2 sm:p-4`}>
@@ -692,7 +817,36 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
             )}
           </div>
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-        </div>
+        </Panel>
+      </Group>
+
+      {/* Persona Customization & Showcase Modal */}
+      <PersonaModal
+        isOpen={isPersonaModalOpen}
+        onClose={() => setIsPersonaModalOpen(false)}
+        activePersona={activePersona}
+        onSavePersona={(updated) => {
+          setActivePersona(updated);
+        }}
+        onSelectExamplePrompt={handleSelectExamplePrompt}
+      />
+
+      {/* Conversation Memory Bank Panel */}
+      <MemoryPanel
+        isOpen={isMemoryPanelOpen}
+        onClose={() => setIsMemoryPanelOpen(false)}
+        memories={currentMemories}
+        onAddMemory={handleAddMemory}
+        onRemoveMemory={handleRemoveMemory}
+        onClearMemories={handleClearMemories}
+      />
+
+      {/* Knowledge Base Modal */}
+      <KnowledgeBaseModal
+        isOpen={isKnowledgeBaseModalOpen}
+        onClose={() => setIsKnowledgeBaseModalOpen(false)}
+        onSelectSampleQuery={(q) => handleSendMessage(q)}
+      />
     </div>
   );
 };

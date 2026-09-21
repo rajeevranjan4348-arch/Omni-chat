@@ -230,7 +230,7 @@ export const CoderMode: React.FC = () => {
             try {
               const ai = getAiInstance();
               const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3.1-pro-preview',
                 contents: `Complete this code snippet based on the prompt: "${prompt}". Return ONLY the code, no markdown, no explanations.`
               });
               const completion = response.text.replace(/```[\s\S]*?\n/g, '').replace(/```/g, '');
@@ -283,7 +283,7 @@ export const CoderMode: React.FC = () => {
     }));
 
     chatRef.current = ai.chats.create({
-      model: 'gemini-2.5-pro',
+      model: 'gemini-3.1-pro-preview',
       history: history.length > 0 ? history : undefined,
       config: {
         systemInstruction: "You are an expert AI software engineer and code generator (like Codex or Cursor). When asked to write code, provide a brief explanation, but ALWAYS include the complete, working code in a markdown code block. Specify the language in the code block (e.g., ```html, ```javascript, ```python). If the user asks for a web component, try to provide a single file (HTML with embedded CSS/JS) if possible, so it can be previewed easily.",
@@ -674,7 +674,7 @@ export const CoderMode: React.FC = () => {
     try {
       const ai = getAiInstance();
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-preview-image-generation',
+        model: 'gemini-2.5-flash-image',
         contents: {
           parts: [
             {

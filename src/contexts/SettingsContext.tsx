@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { PersonaConfig } from '../types';
+import { DEFAULT_PERSONA, PRESET_PERSONAS } from '../data/personas';
 
 interface UserProfile {
   name: string;
@@ -20,6 +22,9 @@ interface SettingsContextType {
   setUserProfile: (profile: UserProfile) => void;
   memory: string[];
   setMemory: (memory: string[] | ((prev: string[]) => string[])) => void;
+  activePersona: PersonaConfig;
+  setActivePersona: (persona: PersonaConfig) => void;
+  resetToDefaultPersona: () => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -31,6 +36,22 @@ export const SettingsProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const [ttsVoice, setTtsVoice] = useState<string>('Zephyr');
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
   
+  const [activePersona, setActivePersona] = useState<PersonaConfig>(() => {
+    const saved = localStorage.getItem('omnichat_active_persona');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return DEFAULT_PERSONA;
+  });
+
+  const resetToDefaultPersona = () => {
+    setActivePersona(DEFAULT_PERSONA);
+  };
+
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('omnichat_user_profile');
     return saved ? JSON.parse(saved) : { name: '', preferences: '' };
@@ -40,6 +61,10 @@ export const SettingsProvider: React.FC<{children: React.ReactNode}> = ({ childr
     const saved = localStorage.getItem('omnichat_memory');
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    localStorage.setItem('omnichat_active_persona', JSON.stringify(activePersona));
+  }, [activePersona]);
 
   useEffect(() => {
     localStorage.setItem('omnichat_user_profile', JSON.stringify(userProfile));
@@ -70,7 +95,9 @@ export const SettingsProvider: React.FC<{children: React.ReactNode}> = ({ childr
       availableMics,
       wakeWordSensitivity, setWakeWordSensitivity,
       userProfile, setUserProfile,
-      memory, setMemory
+      memory, setMemory,
+      activePersona, setActivePersona,
+      resetToDefaultPersona
     }}>
       {children}
     </SettingsContext.Provider>
@@ -82,3 +109,4 @@ export const useSettings = () => {
   if (!context) throw new Error("useSettings must be used within SettingsProvider");
   return context;
 };
+

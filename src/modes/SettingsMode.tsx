@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTheme, ThemeColor, ThemeFont } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { Palette, Sun, Moon, Mic, Volume2, Type, Sliders, Monitor, Zap, User } from 'lucide-react';
+import { Palette, Sun, Moon, Mic, Volume2, Type, Sliders, Monitor, Zap, User, Sparkles, Brain, Plus, Trash2, Edit3, RotateCcw } from 'lucide-react';
+import { PersonaModal } from '../components/PersonaModal';
 
 export const SettingsMode: React.FC = () => {
   const { color, font, isDarkMode, setColor, setFont, setIsDarkMode, getBgClass, getTextClass, getAccentClass, getBorderClass } = useTheme();
@@ -11,8 +12,13 @@ export const SettingsMode: React.FC = () => {
     ttsVoice, setTtsVoice, 
     availableMics,
     wakeWordSensitivity, setWakeWordSensitivity,
-    userProfile, setUserProfile
+    userProfile, setUserProfile,
+    activePersona, setActivePersona, resetToDefaultPersona,
+    memory, setMemory
   } = useSettings();
+
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [newMemoryInput, setNewMemoryInput] = useState('');
 
   const colors: { id: ThemeColor; label: string; class: string }[] = [
     { id: 'slate', label: 'Slate', class: 'bg-slate-500' },
@@ -297,8 +303,184 @@ export const SettingsMode: React.FC = () => {
             </div>
           </section>
 
+          {/* AI Chatbot Personality Section */}
+          <section className={`p-6 rounded-2xl border md:col-span-2 ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
+                  <Sparkles size={20} className={getAccentClass()} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold">AI Chatbot Personality</h2>
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                    Name, backstory, tone of voice, and guiding characteristics
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={resetToDefaultPersona}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                    isDarkMode ? 'bg-white/5 hover:bg-white/10 text-white/70' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                  title="Reset to default Aria persona"
+                >
+                  <RotateCcw size={13} /> Reset
+                </button>
+                <button
+                  onClick={() => setIsPersonaModalOpen(true)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-colors"
+                >
+                  <Edit3 size={13} /> Edit Personality
+                </button>
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-black/30 border-white/10' : 'bg-slate-50 border-slate-200'} space-y-4`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isDarkMode ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-emerald-100'}`}>
+                  {activePersona.avatar || '✨'}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold">{activePersona.name}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isDarkMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'}`}>
+                      Active Companion
+                    </span>
+                  </div>
+                  <p className={`text-xs font-medium ${isDarkMode ? 'text-emerald-400/90' : 'text-emerald-600'}`}>
+                    {activePersona.title}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>Backstory</h4>
+                <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-white/80' : 'text-slate-700'}`}>
+                  {activePersona.backstory}
+                </p>
+              </div>
+
+              <div>
+                <h4 className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>Specific Tone of Voice</h4>
+                <p className={`text-sm leading-relaxed ${isDarkMode ? 'text-white/80' : 'text-slate-700'}`}>
+                  {activePersona.toneOfVoice}
+                </p>
+              </div>
+
+              <div>
+                <h4 className={`text-xs font-semibold uppercase tracking-wider mb-1.5 ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>Guiding Characteristics</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {activePersona.characteristics.map((char, i) => (
+                    <div key={i} className={`p-2.5 rounded-lg border text-xs leading-relaxed ${isDarkMode ? 'bg-black/20 border-white/5 text-white/70' : 'bg-white border-slate-200 text-slate-700'}`}>
+                      {char}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* AI Long-term Memory Bank Section */}
+          <section className={`p-6 rounded-2xl border md:col-span-2 ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
+                  <Brain size={20} className={getAccentClass()} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold">Global Memory Bank</h2>
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                    Facts, preferences, and key details stored across all conversations
+                  </p>
+                </div>
+              </div>
+              {memory.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('Clear all global memories?')) {
+                      setMemory([]);
+                    }
+                  }}
+                  className="text-xs text-red-400 hover:text-red-300"
+                >
+                  Clear All ({memory.length})
+                </button>
+              )}
+            </div>
+
+            {/* Add memory item */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newMemoryInput}
+                onChange={e => setNewMemoryInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newMemoryInput.trim()) {
+                    e.preventDefault();
+                    if (!memory.includes(newMemoryInput.trim())) {
+                      setMemory(prev => [...prev, newMemoryInput.trim()]);
+                    }
+                    setNewMemoryInput('');
+                  }
+                }}
+                placeholder="Add a global memory or permanent preference (e.g., 'User is learning Japanese')..."
+                className={`flex-1 p-2.5 text-sm rounded-xl border outline-none ${
+                  isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                }`}
+              />
+              <button
+                onClick={() => {
+                  if (newMemoryInput.trim()) {
+                    if (!memory.includes(newMemoryInput.trim())) {
+                      setMemory(prev => [...prev, newMemoryInput.trim()]);
+                    }
+                    setNewMemoryInput('');
+                  }
+                }}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Plus size={14} /> Add Fact
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {memory.length === 0 ? (
+                <p className={`text-xs p-4 text-center rounded-xl border border-dashed ${isDarkMode ? 'border-white/10 text-white/40' : 'border-slate-200 text-slate-400'}`}>
+                  No global memories stored yet. The AI will automatically save important facts using tools, or you can add them manually above.
+                </p>
+              ) : (
+                memory.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex items-center justify-between p-3 rounded-xl border ${
+                      isDarkMode ? 'bg-black/20 border-white/5 text-white/80' : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="text-sm">• {item}</span>
+                    <button
+                      onClick={() => setMemory(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-slate-400 hover:text-red-400 p-1"
+                      title="Delete memory"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
         </div>
       </div>
+
+      <PersonaModal
+        isOpen={isPersonaModalOpen}
+        onClose={() => setIsPersonaModalOpen(false)}
+        activePersona={activePersona}
+        onSavePersona={setActivePersona}
+      />
     </div>
   );
 };

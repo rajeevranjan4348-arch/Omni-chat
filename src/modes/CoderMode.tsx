@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Copy, Download, Terminal, HelpCircle, Code2, Palette, Search, Folder, File, Plus, Trash2, GitBranch, GitCommit, GitPullRequest, UploadCloud, DownloadCloud, Edit2, Play, FileText, MessageSquare, Image as ImageIcon, X, TestTube } from 'lucide-react';
 import { getAiInstance } from '../services/gemini';
+import { showToast } from '../utils/toast';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useTheme } from '../contexts/ThemeContext';
 import ReactMarkdown from 'react-markdown';
@@ -191,15 +192,14 @@ export const CoderMode: React.FC = () => {
   const handleDeleteProject = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (projects.length === 1) {
-      alert('Cannot delete the last project.');
+      showToast('Cannot delete the last project.', 'warning');
       return;
     }
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      const remaining = projects.filter(p => p.id !== id);
-      setProjects(remaining);
-      if (currentProjectId === id) {
-        handleSwitchProject(remaining[0].id);
-      }
+    const remaining = projects.filter(p => p.id !== id);
+    setProjects(remaining);
+    showToast('Project deleted', 'info');
+    if (currentProjectId === id) {
+      handleSwitchProject(remaining[0].id);
     }
   };
 
@@ -593,16 +593,15 @@ export const CoderMode: React.FC = () => {
     const remainingFiles = files.filter(f => !idsToDelete.includes(f.id));
     
     if (remainingFiles.filter(f => f.type !== 'folder').length === 0) {
-      alert('Cannot delete the last file.');
+      showToast('Cannot delete the last file.', 'warning');
       return;
     }
     
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      setFiles(remainingFiles);
-      if (idsToDelete.includes(currentFileId)) {
-        const nextFile = remainingFiles.find(f => f.type !== 'folder');
-        if (nextFile) setCurrentFileId(nextFile.id);
-      }
+    setFiles(remainingFiles);
+    showToast('Item deleted', 'info');
+    if (idsToDelete.includes(currentFileId)) {
+      const nextFile = remainingFiles.find(f => f.type !== 'folder');
+      if (nextFile) setCurrentFileId(nextFile.id);
     }
   };
 
@@ -616,26 +615,26 @@ export const CoderMode: React.FC = () => {
     };
     setCommits(prev => [newCommit, ...prev]);
     setCommitMessage('');
+    showToast('Commit created successfully', 'success');
   };
 
   const handlePull = () => {
     if (commits.length === 0) {
-      alert('No commits to pull.');
+      showToast('No commits to pull.', 'info');
       return;
     }
-    if (window.confirm('This will overwrite your current files with the latest commit. Continue?')) {
-      const latestCommit = commits[0];
-      setFiles(latestCommit.files);
-      
-      // Ensure currentFileId is valid
-      if (!latestCommit.files.find(f => f.id === currentFileId)) {
-        setCurrentFileId(latestCommit.files[0]?.id || '1');
-      }
+    const latestCommit = commits[0];
+    setFiles(latestCommit.files);
+    
+    // Ensure currentFileId is valid
+    if (!latestCommit.files.find(f => f.id === currentFileId)) {
+      setCurrentFileId(latestCommit.files[0]?.id || '1');
     }
+    showToast('Pulled latest commit files', 'success');
   };
 
   const handlePush = () => {
-    alert('Changes pushed successfully! (Simulated)');
+    showToast('Changes pushed successfully! (Simulated)', 'success');
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -699,7 +698,7 @@ export const CoderMode: React.FC = () => {
       }
     } catch (error) {
       console.error('Error generating image:', error);
-      alert('Failed to generate image. Please try again.');
+      showToast('Failed to generate image. Please try again.', 'error');
       setIsImageModalOpen(false);
     } finally {
       setIsGeneratingImage(false);

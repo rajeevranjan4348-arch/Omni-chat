@@ -12,13 +12,18 @@ import { SettingsMode } from './modes/SettingsMode';
 import { LogsMode } from './modes/LogsMode';
 import { LiquidChatMode } from './modes/LiquidChatMode';
 import { GptAstraMode } from './modes/GptAstraMode';
+import { DashboardMode } from './modes/DashboardMode';
+import { HistoryMode } from './modes/HistoryMode';
+import { OmniChatMode } from './modes/OmniChatMode';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastContainer } from './components/ToastContainer';
 import { Menu, X } from 'lucide-react';
 import { useTheme } from './contexts/ThemeContext';
 import { useSettings } from './contexts/SettingsContext';
 import { useWakeWord } from './hooks/useWakeWord';
 
 export default function App() {
-  const [currentMode, setCurrentMode] = useState<AppMode | 'liquid-chat'>('gpt-astra');
+  const [currentMode, setCurrentMode] = useState<AppMode>('gpt-astra');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [wakeWordTriggered, setWakeWordTriggered] = useState(false);
   const { getBgClass, getTextClass } = useTheme();
@@ -34,8 +39,18 @@ export default function App() {
     setTimeout(() => setWakeWordTriggered(false), 1000);
   }, wakeWords, wakeWordSensitivity);
 
+  const handleModeChange = (mode: string) => {
+    setCurrentMode(mode as AppMode);
+  };
+
   const renderMode = () => {
     switch (currentMode) {
+      case 'dashboard':
+        return <DashboardMode onModeChange={handleModeChange} />;
+      case 'omni-chat':
+        return <OmniChatMode />;
+      case 'history':
+        return <HistoryMode onModeChange={handleModeChange} />;
       case 'gpt-astra':
         return <GptAstraMode />;
       case 'jarvis':
@@ -90,7 +105,10 @@ export default function App() {
         >
           {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
-        {renderMode()}
+        <ErrorBoundary modeName={currentMode}>
+          {renderMode()}
+        </ErrorBoundary>
+        <ToastContainer />
       </main>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Mic, Square, Loader2, FileAudio } from 'lucide-react';
 import { transcribeAudio } from '../services/gemini';
+import { showToast } from '../utils/toast';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 export const AudioTranscriptionMode: React.FC = () => {
@@ -33,7 +34,7 @@ export const AudioTranscriptionMode: React.FC = () => {
       setTranscription('');
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      alert('Could not access microphone. Please ensure permissions are granted.');
+      showToast('Could not access microphone. Please ensure permissions are granted.', 'warning');
     }
   };
 

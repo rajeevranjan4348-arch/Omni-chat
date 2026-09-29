@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, Send, Code, Search, FileText, Zap, Brain, Eye, Upload, X, Loader, Sparkles, Star, Trash2, Copy, Volume2, VolumeX, Download, Plus, Pin, PinOff, Edit2, RefreshCw, Palette, BookOpen, ChevronRight, Check, CheckCheck, User, Bot, MoreHorizontal, Command, Maximize2, Minimize2, BarChart2, Activity, Quote, Play, Hash, Square } from 'lucide-react';
 import { getAiInstance, transcribeAudio, generateSpeech } from '../services/gemini';
+import { showToast } from '../utils/toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -358,7 +359,7 @@ export const LiquidChatMode: React.FC = () => {
             }
           } catch (error) {
             console.error('Transcription error:', error);
-            alert('Failed to transcribe audio. Please try again.');
+            showToast('Failed to transcribe audio. Please try again.', 'error');
           } finally {
             setStatus('idle');
           }
@@ -372,7 +373,7 @@ export const LiquidChatMode: React.FC = () => {
       setStatus('listening');
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      alert('Could not access the microphone. Please check your permissions.');
+      showToast('Could not access microphone. Please check your permissions.', 'warning');
       setStatus('idle');
     }
   };

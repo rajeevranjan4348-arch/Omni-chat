@@ -1,23 +1,29 @@
 import React from 'react';
 import { AppMode } from '../types';
-import { MessageSquare, Zap, Mic, MapPin, FileAudio, Volume2, Cpu, Code, Settings, TerminalSquare, Sparkles, Compass } from 'lucide-react';
+import { 
+  MessageSquare, Zap, Mic, MapPin, FileAudio, Volume2, Cpu, Code, 
+  Settings, TerminalSquare, Sparkles, Compass, LayoutDashboard, Bot, History 
+} from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface SidebarProps {
-  currentMode: AppMode | 'liquid-chat';
-  onModeChange: (mode: AppMode | 'liquid-chat') => void;
+  currentMode: AppMode;
+  onModeChange: (mode: AppMode) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentMode, onModeChange }) => {
   const { getSidebarClass, getAccentClass, getBorderClass } = useTheme();
 
-  const modes: { id: AppMode | 'liquid-chat'; label: string; icon: React.ReactNode }[] = [
+  const modes: { id: AppMode; label: string; icon: React.ReactNode }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+    { id: 'omni-chat', label: 'Omni Chat', icon: <Bot size={20} /> },
     { id: 'gpt-astra', label: 'GPT Astra (270)', icon: <Compass size={20} /> },
-    { id: 'jarvis', label: 'J.A.R.V.I.S. HUD', icon: <Cpu size={20} /> },
-    { id: 'coder', label: 'AI Coder IDE', icon: <Code size={20} /> },
-    { id: 'liquid-chat', label: 'Liquid Chat', icon: <Sparkles size={20} /> },
     { id: 'chat-pro', label: 'Pro Chat (Thinking)', icon: <MessageSquare size={20} /> },
     { id: 'chat-fast', label: 'Fast Chat', icon: <Zap size={20} /> },
+    { id: 'liquid-chat', label: 'Liquid Chat', icon: <Sparkles size={20} /> },
+    { id: 'history', label: 'Chat History', icon: <History size={20} /> },
+    { id: 'jarvis', label: 'J.A.R.V.I.S. HUD', icon: <Cpu size={20} /> },
+    { id: 'coder', label: 'AI Coder IDE', icon: <Code size={20} /> },
     { id: 'voice-live', label: 'Voice (Live API)', icon: <Mic size={20} /> },
     { id: 'search-maps', label: 'Search & Maps', icon: <MapPin size={20} /> },
     { id: 'transcription', label: 'Transcription', icon: <FileAudio size={20} /> },

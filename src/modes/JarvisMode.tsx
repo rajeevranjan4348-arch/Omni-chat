@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Send, Square, Loader2, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Globe, Cpu, HardDrive, Wifi, Activity } from 'lucide-react';
 import { getAiInstance, generateSpeech, transcribeAudio } from '../services/gemini';
+import { showToast } from '../utils/toast';
 import { useSettings } from '../contexts/SettingsContext';
 
 interface JarvisModeProps {
@@ -353,7 +354,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
       setStatus('LISTENING');
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      alert('Could not access the microphone. Please check your permissions.');
+      showToast('Could not access microphone. Please check your permissions.', 'warning');
       setStatus('ONLINE');
     }
   };

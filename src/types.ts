@@ -1,7 +1,11 @@
 export type AppMode = 
+  | 'dashboard'
+  | 'omni-chat'
   | 'gpt-astra'
   | 'chat-pro'
   | 'chat-fast'
+  | 'liquid-chat'
+  | 'history'
   | 'voice-live'
   | 'search-maps'
   | 'transcription'

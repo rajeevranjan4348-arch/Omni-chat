@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Send, Loader2, Mic, Square } from 'lucide-react';
 import { transcribeAudio } from '../services/gemini';
+import { showToast } from '../utils/toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -57,7 +58,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
             }
           } catch (error) {
             console.error('Transcription error:', error);
-            alert('Failed to transcribe audio. Please try again.');
+            showToast('Failed to transcribe audio. Please try again.', 'error');
           } finally {
             setIsTranscribing(false);
           }
@@ -70,7 +71,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
       setIsRecording(true);
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      alert('Could not access the microphone. Please check your permissions.');
+      showToast('Could not access microphone. Please check your permissions.', 'warning');
     }
   };
 

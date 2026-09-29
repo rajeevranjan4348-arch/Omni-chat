@@ -86,25 +86,36 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
     try {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          const { latitude, longitude } = pos.coords;
-          const [weatherRes, geoRes] = await Promise.all([
-            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,visibility`),
-            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`)
-          ]);
-          const weatherData = await weatherRes.json();
-          const geoData = await geoRes.json();
-          const code = weatherData.current.weather_code;
-          setWeather({
-            temp: Math.round(weatherData.current.temperature_2m),
-            feelsLike: Math.round(weatherData.current.apparent_temperature),
-            desc: getWeatherKey(code),
-            code,
-            humidity: weatherData.current.relative_humidity_2m,
-            windSpeed: Math.round(weatherData.current.wind_speed_10m),
-            visibility: Math.round((weatherData.current.visibility || 10000) / 1000),
-            city: geoData.address?.city || geoData.address?.town || geoData.address?.village || 'Your Location',
-          });
-          setWeatherLoading(false);
+          try {
+            const { latitude, longitude } = pos.coords;
+            const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,visibility`);
+            const weatherData = await weatherRes.json();
+            let cityName = 'Local Area';
+            try {
+              const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+              if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                cityName = geoData.address?.city || geoData.address?.town || geoData.address?.village || 'Your Location';
+              }
+            } catch {
+              cityName = 'Your Location';
+            }
+            const code = weatherData.current?.weather_code ?? 0;
+            setWeather({
+              temp: Math.round(weatherData.current?.temperature_2m ?? 22),
+              feelsLike: Math.round(weatherData.current?.apparent_temperature ?? 22),
+              desc: getWeatherKey(code),
+              code,
+              humidity: weatherData.current?.relative_humidity_2m ?? 50,
+              windSpeed: Math.round(weatherData.current?.wind_speed_10m ?? 8),
+              visibility: Math.round((weatherData.current?.visibility || 10000) / 1000),
+              city: cityName,
+            });
+          } catch {
+            // fallback
+          } finally {
+            setWeatherLoading(false);
+          }
         },
         async () => {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=28.6&longitude=77.2&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,visibility`);

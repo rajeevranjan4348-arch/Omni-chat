@@ -4,30 +4,64 @@ import { useSettings } from '../contexts/SettingsContext';
 import {
   Send, Mic, Square, Loader2, Bot, User, Trash2, RotateCcw,
   Copy, Check, Sparkles, Plus, History, X, MessageSquare,
-  Clock, ChevronRight, Search
+  Clock, ChevronRight, Search, BookOpen, Brain, UserCircle, ExternalLink
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { RetrievedSource, MemoryItem, PersonaConfig } from '../types';
+import { PersonaModal } from '../components/PersonaModal';
+import { KnowledgeBaseModal } from '../components/KnowledgeBaseModal';
+import { MemoryPanel } from '../components/MemoryPanel';
+import { buildSystemInstructionForPersona } from '../data/personas';
+import { KnowledgeBaseService } from '../services/knowledgeBaseService';
+import { extractLocalMemories, extractMemoriesWithGemini, recallRelevantMemories } from '../services/memoryService';
+import { showToast } from '../utils/toast';
 
 /* ─── Types ─────────────────────────────────────────── */
-interface Msg { id: string; role: 'user' | 'model'; text: string; streaming?: boolean; }
+interface Msg {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  streaming?: boolean;
+  recalledMemories?: string[];
+  retrievedSources?: RetrievedSource[];
+}
+
 interface Conversation {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
   messages: Msg[];
+  memories?: MemoryItem[];
 }
 
 const STORAGE_KEY = 'omnichat_conversations_v2';
 
 function loadConversations(): Conversation[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-  catch { return []; }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((c: any) => ({
+      ...c,
+      memories: Array.isArray(c.memories) ? c.memories.map((m: any) => ({
+        ...m,
+        timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+      })) : []
+    }));
+  } catch {
+    return [];
+  }
 }
 
 function saveConversations(convs: Conversation[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
+  } catch (err) {
+    console.error('Failed to save conversations:', err);
+  }
 }
 
 function makeTitle(messages: Msg[]): string {
@@ -84,11 +118,6 @@ const STYLES = `
     0%, 100% { opacity: 0.5; }
     50%       { opacity: 1; }
   }
-  @keyframes omni-particle {
-    0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0.7; }
-    50%  { opacity: 0.3; }
-    100% { transform: translateY(-60px) translateX(20px) scale(0.4); opacity: 0; }
-  }
   @keyframes omni-typing-dot {
     0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
     40%           { transform: scale(1);   opacity: 1; }
@@ -129,21 +158,6 @@ function BackgroundOrbs() {
       <div style={{ position:'absolute',top:'-10%',left:'-5%',width:480,height:480,borderRadius:'50%',background:'radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 70%)',animation:'omni-float 9s ease-in-out infinite',filter:'blur(40px)' }} />
       <div style={{ position:'absolute',bottom:'5%',right:'-8%',width:420,height:420,borderRadius:'50%',background:'radial-gradient(circle, rgba(99,102,241,0.16) 0%, transparent 70%)',animation:'omni-float2 11s ease-in-out infinite',filter:'blur(50px)' }} />
       <div style={{ position:'absolute',top:'40%',right:'20%',width:280,height:280,borderRadius:'50%',background:'radial-gradient(circle, rgba(168,85,247,0.12) 0%, transparent 70%)',animation:'omni-float3 13s ease-in-out infinite',filter:'blur(35px)' }} />
-    </div>
-  );
-}
-
-/* ─── Particles ──────────────────────────────────────── */
-function Particles() {
-  const dots = Array.from({ length: 14 }, (_, i) => ({
-    id: i, x: Math.random()*100, y: 30+Math.random()*50,
-    size: 2+Math.random()*3, delay: Math.random()*4, dur: 3+Math.random()*3,
-  }));
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-      {dots.map(d => (
-        <div key={d.id} style={{ position:'absolute',left:`${d.x}%`,top:`${d.y}%`,width:d.size,height:d.size,borderRadius:'50%',background:`rgba(139,92,246,0.6)`,animation:`omni-particle ${d.dur}s ${d.delay}s ease-out infinite` }} />
-      ))}
     </div>
   );
 }
@@ -200,82 +214,84 @@ function HistoryPanel({
   const week: Conversation[] = [];
   const older: Conversation[] = [];
 
-  filtered.forEach(c => {
-    const diff = now - c.updatedAt;
-    if (diff < 86400000) today.push(c);
-    else if (diff < 604800000) week.push(c);
+  for (const c of filtered) {
+    const age = now - c.updatedAt;
+    if (age < 86400000) today.push(c);
+    else if (age < 7 * 86400000) week.push(c);
     else older.push(c);
-  });
+  }
 
   if (today.length) grouped.push({ label: 'Today', items: today });
-  if (week.length) grouped.push({ label: 'This Week', items: week });
+  if (week.length)  grouped.push({ label: 'Previous 7 Days', items: week });
   if (older.length) grouped.push({ label: 'Older', items: older });
 
   return (
-    <div className="omni-panel-in absolute inset-y-0 right-0 z-30 flex flex-col w-72"
-      style={{ background:'rgba(10,10,18,0.97)',borderLeft:'1px solid rgba(139,92,246,0.15)',backdropFilter:'blur(24px)' }}>
-
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-4 py-3.5 shrink-0"
-        style={{ borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+    <div className="omni-panel-in absolute top-0 left-0 bottom-0 w-80 z-30 flex flex-col"
+      style={{ background:'rgba(14,17,28,0.96)',borderRight:'1px solid rgba(255,255,255,0.08)',backdropFilter:'blur(24px)' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex items-center gap-2">
-          <History size={15} className="text-violet-400" />
-          <span className="text-sm font-semibold text-white">Chat History</span>
-          <span className="text-[10px] bg-violet-500/20 text-violet-300 rounded-full px-1.5 py-0.5">{conversations.length}</span>
+          <History size={16} className="text-violet-400"/>
+          <span className="text-sm font-semibold tracking-wide">Conversations</span>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/8 transition-colors text-white/40 hover:text-white">
-          <X size={14}/>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors">
+          <X size={15}/>
         </button>
       </div>
 
       {/* Search */}
-      <div className="px-3 py-2.5 shrink-0" style={{ borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)' }}>
+      <div className="px-3 py-2.5" style={{ borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs" style={{ background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.06)' }}>
           <Search size={13} className="text-white/30 shrink-0"/>
           <input
-            type="text" value={searchQuery} onChange={e=>onSearch(e.target.value)}
-            placeholder="Search conversations…"
-            className="bg-transparent outline-none text-xs text-white/80 placeholder-white/25 w-full"
+            value={searchQuery}
+            onChange={e => onSearch(e.target.value)}
+            placeholder="Search chats…"
+            className="bg-transparent outline-none w-full text-white/80 placeholder:text-white/25"
           />
-          {searchQuery && <button onClick={()=>onSearch('')} className="text-white/30 hover:text-white/60"><X size={11}/></button>}
+          {searchQuery && (
+            <button onClick={() => onSearch('')} className="text-white/30 hover:text-white/60">
+              <X size={12}/>
+            </button>
+          )}
         </div>
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto omni-scrollbar py-2">
-        {grouped.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 gap-2 text-white/20">
-            <MessageSquare size={22}/>
-            <span className="text-xs">{searchQuery ? 'No matches found' : 'No conversations yet'}</span>
+      <div className="flex-1 overflow-y-auto px-2 py-2 omni-scrollbar space-y-4">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 px-4">
+            <MessageSquare size={24} className="text-white/15 mx-auto mb-2"/>
+            <p className="text-xs text-white/30">{searchQuery ? 'No chats matched your search' : 'No saved conversations yet'}</p>
           </div>
         ) : (
-          grouped.map(group => (
-            <div key={group.label} className="mb-2">
-              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/25">{group.label}</div>
-              {group.items.map(conv => (
-                <div key={conv.id} className="px-2 mb-0.5">
-                  <div
-                    onClick={() => onSelect(conv.id)}
-                    className={`history-item flex items-start gap-2.5 p-2.5 rounded-xl cursor-pointer border ${conv.id===currentId?'active':'border-transparent'}`}
-                  >
-                    <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center mt-0.5"
-                      style={{ background:'rgba(139,92,246,0.12)',border:'1px solid rgba(139,92,246,0.2)' }}>
-                      <MessageSquare size={12} className="text-violet-400"/>
+          grouped.map(grp => (
+            <div key={grp.label}>
+              <p className="text-[10px] font-semibold tracking-wider uppercase px-2 mb-1 text-white/25">
+                {grp.label}
+              </p>
+              {grp.items.map(c => (
+                <div
+                  key={c.id}
+                  onClick={() => onSelect(c.id)}
+                  className={`history-item group relative flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer mb-0.5 border ${
+                    c.id === currentId
+                      ? 'active text-violet-300'
+                      : 'border-transparent text-white/65 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <MessageSquare size={13} className="shrink-0 opacity-50"/>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs truncate font-medium leading-tight">{c.title}</p>
+                      <p className="text-[10px] text-white/25 mt-0.5">{timeAgo(c.updatedAt)}</p>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white/80 truncate leading-snug">{conv.title}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <Clock size={9} className="text-white/20"/>
-                        <span className="text-[10px] text-white/25">{timeAgo(conv.updatedAt)}</span>
-                        <span className="text-[10px] text-white/20">·</span>
-                        <span className="text-[10px] text-white/25">{conv.messages.length} msgs</span>
-                      </div>
-                    </div>
+                  </div>
+                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity ml-1">
                     <button
-                      onClick={e => { e.stopPropagation(); onDelete(conv.id); }}
-                      className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400 text-white/25 transition-all shrink-0"
-                      style={{ opacity: conv.id===currentId ? 0.5 : undefined }}
-                      title="Delete"
+                      onClick={e => { e.stopPropagation(); onDelete(c.id); }}
+                      className="p-1 rounded-lg hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors"
+                      title="Delete chat"
                     >
                       <Trash2 size={11}/>
                     </button>
@@ -306,15 +322,13 @@ const SUGGESTIONS = [
 ];
 
 export const OmniChatMode: React.FC = () => {
-  const { userProfile } = useSettings();
-  const apiKey = process.env.GEMINI_API_KEY;
+  const { userProfile, memory, activePersona, setActivePersona } = useSettings();
 
   const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
   const [currentId, setCurrentId] = useState<string>(() => {
     const convs = loadConversations();
     if (convs.length > 0) return convs[0].id;
-    const id = `conv-${Date.now()}`;
-    return id;
+    return `conv-${Date.now()}`;
   });
   const [showHistory, setShowHistory] = useState(false);
   const [historySearch, setHistorySearch] = useState('');
@@ -324,7 +338,11 @@ export const OmniChatMode: React.FC = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
 
-  const chatRef = useRef<any>(null);
+  // Modals for Persona, Knowledge Base, and Memory
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [isKnowledgeBaseModalOpen, setIsKnowledgeBaseModalOpen] = useState(false);
+  const [isMemoryPanelOpen, setIsMemoryPanelOpen] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -332,21 +350,32 @@ export const OmniChatMode: React.FC = () => {
 
   const currentConv = conversations.find(c => c.id === currentId);
   const messages = currentConv?.messages ?? [];
+  const currentMemories = currentConv?.memories ?? [];
 
   /* ── Persist conversations ───────────────────────── */
-  const upsertConversation = useCallback((id: string, msgs: Msg[]) => {
+  const upsertConversation = useCallback((id: string, msgs: Msg[], mems?: MemoryItem[]) => {
     const cleanMsgs = msgs.filter(m => !m.streaming);
     setConversations(prev => {
       const exists = prev.find(c => c.id === id);
       let updated: Conversation[];
       if (exists) {
         updated = prev.map(c => c.id === id
-          ? { ...c, messages: cleanMsgs, title: makeTitle(cleanMsgs) || c.title, updatedAt: Date.now() }
+          ? {
+              ...c,
+              messages: cleanMsgs,
+              title: makeTitle(cleanMsgs) || c.title,
+              updatedAt: Date.now(),
+              memories: mems !== undefined ? mems : c.memories
+            }
           : c);
       } else {
         const newConv: Conversation = {
-          id, title: makeTitle(cleanMsgs) || 'New Chat',
-          createdAt: Date.now(), updatedAt: Date.now(), messages: cleanMsgs,
+          id,
+          title: makeTitle(cleanMsgs) || 'New Chat',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: cleanMsgs,
+          memories: mems || []
         };
         updated = [newConv, ...prev];
       }
@@ -360,26 +389,10 @@ export const OmniChatMode: React.FC = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  /* ── Init chat session ───────────────────────────── */
-  const initChat = useCallback((msgs: Msg[] = messages) => {
-    if (!apiKey) return;
-    const ai = getAiInstance();
-    let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure.`;
-    if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
-    if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
-    const history = msgs.filter(m => !m.streaming && m.text).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
-    chatRef.current = ai.chats.create({
-      model: 'gemini-2.5-flash',
-      config: { systemInstruction: { parts: [{ text: sys }] } },
-      history: history.length ? history : undefined,
-    });
-  }, [messages, userProfile, apiKey]);
-
   /* ── New chat ────────────────────────────────────── */
   const startNewChat = useCallback(() => {
     const id = `conv-${Date.now()}`;
     setCurrentId(id);
-    chatRef.current = null;
     setShowHistory(false);
     setInput('');
   }, []);
@@ -387,7 +400,6 @@ export const OmniChatMode: React.FC = () => {
   /* ── Load existing conversation ──────────────────── */
   const loadConversation = useCallback((id: string) => {
     setCurrentId(id);
-    chatRef.current = null;
     setShowHistory(false);
   }, []);
 
@@ -412,29 +424,61 @@ export const OmniChatMode: React.FC = () => {
   /* ── Send message ─────────────────────────────────── */
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
-    if (!apiKey) {
-      const msgs: Msg[] = [
-        ...messages,
-        { id: `u-${Date.now()}`, role: 'user', text },
-        { id: `m-${Date.now()}`, role: 'model', text: '**No API key found.** Add your `GEMINI_API_KEY` in the Secrets panel, then restart the app.' },
-      ];
-      upsertConversation(currentId, msgs);
-      return;
-    }
-    if (!chatRef.current) initChat(messages);
 
+    // 1. Knowledge Base Retrieval
+    const kbResults = KnowledgeBaseService.search(text, 4);
+    const kbGroundingContext = kbResults.length > 0 
+      ? KnowledgeBaseService.buildGroundingContext(text, kbResults) 
+      : '';
+
+    // 2. Memory Extraction & Recall
+    const localNewMemories = extractLocalMemories(text);
+    const updatedMemoriesList = [...currentMemories];
+    if (localNewMemories.length > 0) {
+      localNewMemories.forEach(nm => {
+        if (!updatedMemoriesList.some(em => em.content.toLowerCase() === nm.content.toLowerCase())) {
+          updatedMemoriesList.push(nm);
+        }
+      });
+    }
+
+    const recalledFacts = recallRelevantMemories(text, updatedMemoriesList);
+
+    // 3. User Message & Model Streaming Placeholder
     const userMsg: Msg = { id: `u-${Date.now()}`, role: 'user', text };
     const modelId = `m-${Date.now() + 1}`;
-    const streamMsg: Msg = { id: modelId, role: 'model', text: '', streaming: true };
+    const streamMsg: Msg = {
+      id: modelId,
+      role: 'model',
+      text: '',
+      streaming: true,
+      recalledMemories: recalledFacts.length > 0 ? recalledFacts : (updatedMemoriesList.length > 0 ? updatedMemoriesList.slice(0, 3).map(m => m.content) : undefined),
+      retrievedSources: kbResults.length > 0 ? kbResults : undefined
+    };
     const updatedMsgs = [...messages, userMsg, streamMsg];
 
     setConversations(prev => {
       const exists = prev.find(c => c.id === currentId);
       let updated: Conversation[];
       if (exists) {
-        updated = prev.map(c => c.id === currentId ? { ...c, messages: updatedMsgs, title: makeTitle(updatedMsgs) || c.title, updatedAt: Date.now() } : c);
+        updated = prev.map(c => c.id === currentId
+          ? {
+              ...c,
+              messages: updatedMsgs,
+              title: makeTitle(updatedMsgs) || c.title,
+              updatedAt: Date.now(),
+              memories: updatedMemoriesList
+            }
+          : c);
       } else {
-        updated = [{ id: currentId, title: makeTitle([userMsg]), createdAt: Date.now(), updatedAt: Date.now(), messages: updatedMsgs }, ...prev];
+        updated = [{
+          id: currentId,
+          title: makeTitle([userMsg]),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: updatedMsgs,
+          memories: updatedMemoriesList
+        }, ...prev];
       }
       saveConversations(updated);
       return updated;
@@ -444,8 +488,51 @@ export const OmniChatMode: React.FC = () => {
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
+    // Parallel deep extraction
+    extractMemoriesWithGemini(text, updatedMemoriesList).then(extracted => {
+      if (extracted && extracted.length > 0) {
+        setConversations(prev => prev.map(c => {
+          if (c.id === currentId) {
+            const existing = c.memories || [];
+            const toAdd = extracted.filter(nm => !existing.some(em => em.content.toLowerCase() === nm.content.toLowerCase()));
+            if (toAdd.length > 0) {
+              const updated = [...existing, ...toAdd];
+              saveConversations(prev.map(item => item.id === currentId ? { ...item, memories: updated } : item));
+              return { ...c, memories: updated };
+            }
+          }
+          return c;
+        }));
+      }
+    }).catch(err => console.warn('Memory extraction error:', err));
+
     try {
-      const stream = await chatRef.current.sendMessageStream({ message: text });
+      const ai = getAiInstance();
+      const sysInstruction = buildSystemInstructionForPersona(activePersona, {
+        userName: userProfile.name,
+        userPreferences: userProfile.preferences,
+        conversationMemories: updatedMemoriesList,
+        longTermMemories: memory,
+        knowledgeBaseContext: kbGroundingContext
+      });
+
+      const history = messages.filter(m => !m.streaming && m.text).map(m => ({
+        role: m.role,
+        parts: [{ text: m.text }]
+      }));
+
+      const chat = ai.chats.create({
+        model: 'gemini-3.8-flash',
+        config: { systemInstruction: { parts: [{ text: sysInstruction }] } },
+        history: history.length ? history : undefined,
+      });
+
+      let promptToSend = text;
+      if (kbGroundingContext) {
+        promptToSend = `${kbGroundingContext}\n\nUser Question:\n${text}`;
+      }
+
+      const stream = await chat.sendMessageStream({ message: promptToSend });
       let full = '';
       for await (const chunk of stream) {
         if (chunk.text) full += chunk.text;
@@ -456,21 +543,36 @@ export const OmniChatMode: React.FC = () => {
           return updated;
         });
       }
+
       setConversations(prev => {
         const updated = prev.map(c => c.id === currentId
-          ? { ...c, messages: c.messages.map(m => m.id === modelId ? { ...m, streaming: false } : m), updatedAt: Date.now() }
+          ? {
+              ...c,
+              messages: c.messages.map(m => m.id === modelId ? { ...m, streaming: false, text: full || 'I am here and ready to help!' } : m),
+              updatedAt: Date.now()
+            }
           : c);
         saveConversations(updated);
         return updated;
       });
     } catch (err: any) {
+      console.error('OmniChat error:', err);
+      const errorMsg = err?.message || 'Failed to generate response.';
       setConversations(prev => {
         const updated = prev.map(c => c.id === currentId
-          ? { ...c, messages: c.messages.map(m => m.id === modelId ? { ...m, text: `**Error:** ${err?.message ?? 'Something went wrong.'}`, streaming: false } : m) }
+          ? {
+              ...c,
+              messages: c.messages.map(m => m.id === modelId ? {
+                ...m,
+                text: `**Notice:** ${errorMsg}\n\nIf your API key is missing or invalid, check your environment settings.`,
+                streaming: false
+              } : m)
+            }
           : c);
         saveConversations(updated);
         return updated;
       });
+      showToast('Error connecting to Gemini. Please try again.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -478,28 +580,26 @@ export const OmniChatMode: React.FC = () => {
 
   /* ── Clear current chat ──────────────────────────── */
   const clearChat = () => {
-    if (!messages.length) return;
-    if (!window.confirm('Clear all messages in this conversation?')) return;
     setConversations(prev => {
-      const updated = prev.map(c => c.id === currentId ? { ...c, messages: [], title: 'New Chat', updatedAt: Date.now() } : c);
+      const updated = prev.map(c => c.id === currentId ? { ...c, messages: [], updatedAt: Date.now() } : c);
       saveConversations(updated);
       return updated;
     });
-    chatRef.current = null;
+    showToast('Conversation cleared', 'info');
   };
 
-  /* ── Retry last message ──────────────────────────── */
+  /* ── Retry last message ───────────────────────────── */
   const retryLast = () => {
-    const last = [...messages].reverse().find(m => m.role === 'user');
+    const userMsgs = messages.filter(m => m.role === 'user');
+    const last = userMsgs[userMsgs.length - 1];
     if (!last) return;
-    const idx = messages.lastIndexOf(last);
-    const trimmed = messages.slice(0, idx);
+    const lastUserIdx = messages.lastIndexOf(last);
+    const trimmed = messages.slice(0, lastUserIdx);
     setConversations(prev => {
       const updated = prev.map(c => c.id === currentId ? { ...c, messages: trimmed } : c);
       saveConversations(updated);
       return updated;
     });
-    chatRef.current = null;
     setTimeout(() => sendMessage(last.text), 50);
   };
 
@@ -521,15 +621,25 @@ export const OmniChatMode: React.FC = () => {
           try {
             const res = await transcribeAudio(b64, blob.type || 'audio/webm');
             if (res.text) setInput(p => p + (p ? ' ' : '') + res.text);
-          } catch { alert('Transcription failed.'); }
-          finally { setIsTranscribing(false); }
+          } catch {
+            showToast('Voice transcription failed. Please try again.', 'error');
+          } finally {
+            setIsTranscribing(false);
+          }
         };
         stream.getTracks().forEach(t => t.stop());
       };
-      mr.start(); setIsRecording(true);
-    } catch { alert('Could not access microphone.'); }
+      mr.start();
+      setIsRecording(true);
+    } catch {
+      showToast('Could not access microphone. Please check browser permissions.', 'warning');
+    }
   };
-  const stopRecording = () => { mediaRecorderRef.current?.stop(); setIsRecording(false); };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  };
 
   return (
     <>
@@ -581,16 +691,51 @@ export const OmniChatMode: React.FC = () => {
             >
               <Plus size={16}/>
             </button>
+
+            {/* Persona Switcher Button */}
+            <button
+              onClick={() => setIsPersonaModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 text-violet-300 text-xs transition-colors"
+              title="Change AI Persona & Tone"
+            >
+              <span>{activePersona.avatar}</span>
+              <span className="font-medium hidden sm:inline">{activePersona.name}</span>
+            </button>
+
+            {/* Knowledge Base Button */}
+            <button
+              onClick={() => setIsKnowledgeBaseModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-300 text-xs transition-colors"
+              title="Manage Knowledge Base Documents & URLs"
+            >
+              <BookOpen size={13} />
+              <span className="hidden sm:inline">Knowledge</span>
+            </button>
+
+            {/* Memory Button */}
+            <button
+              onClick={() => setIsMemoryPanelOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-300 text-xs transition-colors"
+              title="View Stored Memories"
+            >
+              <Brain size={13} />
+              <span className="hidden sm:inline">Memories</span>
+              {currentMemories.length > 0 && (
+                <span className="bg-purple-500/30 text-purple-200 text-[10px] px-1.5 py-0.2 rounded-full">
+                  {currentMemories.length}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Center: avatar + name */}
-          <div className="flex items-center gap-2.5 absolute left-1/2 -translate-x-1/2">
+          <div className="hidden lg:flex items-center gap-2.5 absolute left-1/2 -translate-x-1/2">
             <OmniAvatar size="sm" />
             <div>
-              <p className="text-sm font-semibold leading-none tracking-wide">Omni</p>
+              <p className="text-sm font-semibold leading-none tracking-wide">{activePersona.name}</p>
               <div className="flex items-center gap-1 mt-0.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" style={{ animation:'omni-glow 2s ease-in-out infinite' }} />
-                <p className="text-[10px]" style={{ color:'rgba(255,255,255,0.35)' }}>Powered by Gemini</p>
+                <p className="text-[10px]" style={{ color:'rgba(255,255,255,0.35)' }}>{activePersona.title}</p>
               </div>
             </div>
           </div>
@@ -621,20 +766,19 @@ export const OmniChatMode: React.FC = () => {
           </div>
         )}
 
-        {/* ── Messages ─────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto relative z-10 px-4 py-6 omni-scrollbar">
+        {/* ── Chat body ────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 relative z-10 omni-scrollbar">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-10 text-center relative">
-              <Particles />
-              <div className="omni-fade-up flex flex-col items-center gap-5">
-                <OmniAvatar size="lg" />
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-6 omni-fade-up max-w-lg mx-auto">
+              <div className="flex flex-col items-center gap-3">
+                <div className="text-4xl mb-1">{activePersona.avatar}</div>
                 <div>
                   <h1 className="text-3xl font-bold tracking-tight mb-1.5"
                     style={{ background:'linear-gradient(135deg,#c4b5fd,#818cf8,#a78bfa)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent' }}>
-                    Hey, I'm Omni
+                    Hey, I'm {activePersona.name}
                   </h1>
                   <p style={{ color:'rgba(255,255,255,0.38)',fontSize:14 }}>
-                    Your AI companion — ask me absolutely anything.
+                    {activePersona.toneOfVoice}
                   </p>
                 </div>
               </div>
@@ -653,20 +797,24 @@ export const OmniChatMode: React.FC = () => {
               </div>
               <div className="flex items-center gap-2" style={{ color:'rgba(255,255,255,0.2)',fontSize:11 }}>
                 <Sparkles size={12}/>
-                <span>Powered by Gemini 2.5 Flash</span>
+                <span>Equipped with Memory System & Knowledge Base</span>
               </div>
             </div>
           ) : (
             <div className="max-w-2xl mx-auto w-full space-y-5">
               {messages.map(msg => (
                 <div key={msg.id} className={`omni-msg-in flex gap-3 group ${msg.role==='user'?'flex-row-reverse':'flex-row'}`}>
-                  {msg.role==='model' ? <OmniAvatar size="sm"/> : (
+                  {msg.role==='model' ? (
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-violet-600/30 border border-violet-500/30 text-sm shadow-md">
+                      {activePersona.avatar}
+                    </div>
+                  ) : (
                     <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5"
                       style={{ background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.1)' }}>
                       <User size={13} style={{ color:'rgba(255,255,255,0.6)' }}/>
                     </div>
                   )}
-                  <div className={`relative max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role==='user'?'rounded-tr-sm':'rounded-tl-sm'}`}
+                  <div className={`relative max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role==='user'?'rounded-tr-sm':'rounded-tl-sm'}`}
                     style={msg.role==='user' ? {
                       background:'linear-gradient(135deg, rgba(139,92,246,0.85) 0%, rgba(99,102,241,0.85) 100%)',
                       boxShadow:'0 4px 20px rgba(139,92,246,0.25)',
@@ -677,6 +825,32 @@ export const OmniChatMode: React.FC = () => {
                     }}>
                     {msg.role==='model' ? (
                       <>
+                        {/* Recalled Memories Indicator */}
+                        {msg.recalledMemories && msg.recalledMemories.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap mb-2 pb-2 border-b border-white/10 text-[11px] text-purple-300">
+                            <Brain size={12} className="text-purple-400 shrink-0" />
+                            <span className="font-semibold text-purple-200">Recalled:</span>
+                            {msg.recalledMemories.map((fact, idx) => (
+                              <span key={idx} className="bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 rounded-full text-[10px]">
+                                {fact}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Retrieved Sources Indicator */}
+                        {msg.retrievedSources && msg.retrievedSources.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap mb-2 pb-2 border-b border-white/10 text-[11px] text-emerald-300">
+                            <BookOpen size={12} className="text-emerald-400 shrink-0" />
+                            <span className="font-semibold text-emerald-200">Knowledge:</span>
+                            {msg.retrievedSources.map((source, idx) => (
+                              <span key={idx} className="bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px]" title={source.snippet}>
+                                {source.title}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
                         {msg.streaming && !msg.text ? (
                           <span className="inline-flex gap-1.5 items-center py-1">
                             {[0,1,2].map(i => (
@@ -713,10 +887,10 @@ export const OmniChatMode: React.FC = () => {
                 animation: isLoading?'omni-border-glow 1.8s ease-in-out infinite':undefined,
               }}>
               <button type="button" onClick={isRecording?stopRecording:startRecording}
-                disabled={isLoading||isTranscribing} title={isRecording?'Stop':'Voice input'}
-                className="p-1.5 rounded-lg transition-all shrink-0 mb-0.5 disabled:opacity-40"
-                style={{ color:isRecording?'#f87171':'rgba(255,255,255,0.3)',background:isRecording?'rgba(239,68,68,0.15)':'transparent',animation:isRecording?'omni-glow 1s ease-in-out infinite':undefined }}>
-                {isRecording?<Square size={16} className="fill-current"/>:<Mic size={16}/>}
+                disabled={isLoading||isTranscribing}
+                className={`p-2 rounded-xl transition-all shrink-0 mb-0.5 ${isRecording?'bg-red-500/20 text-red-400 animate-pulse':'hover:bg-white/5 text-white/40 hover:text-white/70'}`}
+                title={isRecording?'Stop recording':'Voice message'}>
+                {isTranscribing?<Loader2 size={16} className="animate-spin text-violet-400"/>:isRecording?<Square size={16}/>:<Mic size={16}/>}
               </button>
 
               <textarea ref={textareaRef} rows={1} value={input}
@@ -742,6 +916,56 @@ export const OmniChatMode: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Modals ───────────────────────────────── */}
+      <PersonaModal
+        isOpen={isPersonaModalOpen}
+        onClose={() => setIsPersonaModalOpen(false)}
+        activePersona={activePersona}
+        onSavePersona={(persona) => {
+          setActivePersona(persona);
+          showToast(`Persona switched to ${persona.name}`, 'success');
+        }}
+        onSelectExamplePrompt={(prompt) => {
+          setIsPersonaModalOpen(false);
+          setInput(prompt);
+          setTimeout(() => sendMessage(prompt), 100);
+        }}
+      />
+
+      <KnowledgeBaseModal
+        isOpen={isKnowledgeBaseModalOpen}
+        onClose={() => setIsKnowledgeBaseModalOpen(false)}
+        onSelectSampleQuery={(query) => {
+          setIsKnowledgeBaseModalOpen(false);
+          setInput(query);
+          setTimeout(() => sendMessage(query), 100);
+        }}
+      />
+
+      <MemoryPanel
+        isOpen={isMemoryPanelOpen}
+        onClose={() => setIsMemoryPanelOpen(false)}
+        memories={currentMemories}
+        onAddMemory={(mem) => {
+          const newItem: MemoryItem = {
+            id: Date.now().toString(),
+            category: mem.category,
+            content: mem.content,
+            timestamp: new Date(),
+            source: 'user'
+          };
+          const updated = [...currentMemories, newItem];
+          upsertConversation(currentId, messages, updated);
+        }}
+        onRemoveMemory={(memId) => {
+          const updated = currentMemories.filter(m => m.id !== memId);
+          upsertConversation(currentId, messages, updated);
+        }}
+        onClearMemories={() => {
+          upsertConversation(currentId, messages, []);
+        }}
+      />
     </>
   );
 };

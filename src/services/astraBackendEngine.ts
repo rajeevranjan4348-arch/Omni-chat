@@ -78,7 +78,7 @@ export class ModelRouter {
       avgLatencyMs: 650,
     },
     {
-      name: 'gemini-3-flash-preview',
+      name: 'gemini-3.8-flash',
       provider: 'gemini',
       displayName: 'Gemini 3 Flash (Realtime Multimodal)',
       capabilities: ['chat', 'vision', 'coding', 'search', 'voice', 'tool_calling'],
@@ -86,7 +86,7 @@ export class ModelRouter {
       avgLatencyMs: 320,
     },
     {
-      name: 'gemini-3.1-flash-lite-preview',
+      name: 'gemini-3.1-flash-lite',
       provider: 'gemini',
       displayName: 'Gemini 3.1 Flash-Lite (Ultra Fast)',
       capabilities: ['chat', 'coding', 'low_latency'],
@@ -209,7 +209,7 @@ Return strict JSON:
 }`;
 
       const planRes = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-3.1-flash-lite',
         contents: planPrompt,
         config: {
           responseMimeType: 'application/json',
@@ -395,7 +395,7 @@ Synthesize a comprehensive, executive response. If code is needed, supply pristi
         const query = params.query || 'latest AI agent updates';
         try {
           const res = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3.8-flash',
             contents: `Search and provide 3 key factual bullet points for: ${query}`,
             config: {
               tools: [{ googleSearch: {} }],
@@ -497,7 +497,7 @@ export class ResearchEngine {
     let citations: Citation[] = [];
     try {
       const searchRes = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.8-flash',
         contents: `Conduct rigorous factual research on: "${query}". Provide direct evidence, primary claims, and relevant sources.`,
         config: {
           tools: [{ googleSearch: {} }],
@@ -584,7 +584,7 @@ Return JSON array:
 ]`;
 
       const res = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-3.1-flash-lite',
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });

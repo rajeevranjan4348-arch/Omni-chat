@@ -7,7 +7,7 @@ export const getAiInstance = () => {
 export const getSearchGroundedResponse = async (message: string) => {
   const ai = getAiInstance();
   return await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.8-flash",
     contents: message,
     config: {
       tools: [{ googleSearch: {} }],
@@ -37,7 +37,7 @@ export const getMapsGroundedResponse = async (message: string, lat: number, lng:
 export const transcribeAudio = async (base64Audio: string, mimeType: string) => {
   const ai = getAiInstance();
   return await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.8-flash",
     contents: [
       {
         parts: [
@@ -57,7 +57,7 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string) => 
 export const generateSpeech = async (text: string, voiceName: string = "Puck") => {
   const ai = getAiInstance();
   return await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
+    model: "gemini-3.8-flash-tts",
     contents: [{ parts: [{ text }] }],
     config: {
       responseModalities: [Modality.AUDIO],

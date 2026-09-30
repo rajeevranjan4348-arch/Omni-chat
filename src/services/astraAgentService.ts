@@ -153,7 +153,7 @@ Return JSON:
 }`;
 
       const res = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-3.1-flash-lite',
         contents: understandPrompt,
         config: {
           responseMimeType: 'application/json',
@@ -215,7 +215,7 @@ Return JSON:
     if (context.webSearchEnabled || context.request.toLowerCase().includes('latest') || context.request.toLowerCase().includes('current') || context.request.toLowerCase().includes('search')) {
       try {
         const searchRes = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-3.8-flash',
           contents: `Provide 3 verified facts and URLs for: ${context.request}`,
           config: {
             tools: [{ googleSearch: {} }]
@@ -237,7 +237,7 @@ Return JSON:
     this.updateStage('model', 'running', 'Analyzing latency budget vs reasoning depth for model routing...');
     await new Promise((r) => setTimeout(r, 150));
     
-    let chosenModel = context.selectedModel || (understanding.complexity === 'expert' || understanding.complexity === 'high' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview');
+    let chosenModel = context.selectedModel || (understanding.complexity === 'expert' || understanding.complexity === 'high' ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash');
     this.updateStage('model', 'completed', `Routed to ${chosenModel} (Optimized for ${understanding.complexity} reasoning)`, Date.now() - modelStart);
 
     // STAGE 6: SELECT TOOLS

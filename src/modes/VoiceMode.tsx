@@ -29,7 +29,7 @@ export const VoiceMode: React.FC = () => {
       const ai = getAiInstance();
       
       const sessionPromise = ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-3.8-live",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {

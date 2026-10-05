@@ -252,9 +252,56 @@ body.perf-boost .animate-pulse {
 
 /* 3. Smooth scrolling and optimized recyclerview equivalents */
 body.perf-boost * {
-  scroll-behavior: auto !important; /* Prevents scroll stuttering during rapid redraws */
+  scroll-behavior: smooth !important;
+  overscroll-behavior: contain;
 }
 
 
 
 
+
+
+/* ===== Ultra Smooth Scrolling & Interaction ===== */
+html {
+  scroll-behavior: smooth;
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  min-height: 100%;
+  overscroll-behavior: contain;
+}
+
+[data-scroll-container],
+.scroll-smooth,
+.overflow-auto,
+.overflow-y-auto,
+.overflow-x-auto {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  [data-scroll-container],
+  .scroll-smooth,
+  .overflow-auto,
+  .overflow-y-auto,
+  .overflow-x-auto,
+  body.perf-boost * {
+    scroll-behavior: auto !important;
+  }
+}

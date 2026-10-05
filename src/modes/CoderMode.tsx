@@ -1,11 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Copy, Download, Terminal, HelpCircle, Code2, Palette, Search, Folder, File, Plus, Trash2, GitBranch, GitCommit, GitPullRequest, UploadCloud, DownloadCloud, Edit2, Play, FileText, MessageSquare, Image as ImageIcon, X, TestTube } from 'lucide-react';
+import { Send, Loader2, Copy, Download, Terminal, HelpCircle, Code2, Palette, Search, Folder, File, Plus, Trash2, GitBranch, GitCommit, GitPullRequest, UploadCloud, DownloadCloud, Edit2, Play, FileText, MessageSquare, Image as ImageIcon, X, TestTube, Mic, Sparkles, Volume2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { getAiInstance } from '../services/gemini';
-import { showToast } from '../utils/toast';
-import Editor, { useMonaco } from '@monaco-editor/react';
+import Editor from '@monaco-editor/react';
+import { useSafeMonaco } from '../hooks/useSafeMonaco';
 import { useTheme } from '../contexts/ThemeContext';
 import ReactMarkdown from 'react-markdown';
 import { Panel, Group, Separator } from 'react-resizable-panels';
+import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
+import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
+import { VoiceToCodeModal, InsertionTargetMode } from '../components/VoiceToCodeModal';
 
 interface FileNode {
   id: string;
@@ -98,7 +102,7 @@ export const CoderMode: React.FC = () => {
   const [files, setFiles] = useState<FileNode[]>(currentProject.files);
   const [commits, setCommits] = useState<Commit[]>(currentProject.commits);
   
-  const [input, setInput] = useState('');
+  const [input, setInput, clearInputDraft] = useAutoSaveDraft('omnichat_draft_coder');
   const [isLoading, setIsLoading] = useState(false);
   
   const [currentFileId, setCurrentFileId] = useState<string>(currentProject.files[0]?.id || '1');
@@ -130,21 +134,133 @@ export const CoderMode: React.FC = () => {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Voice-to-Code Feature State
+  const [isVoiceToCodeOpen, setIsVoiceToCodeOpen] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [cursorLine, setCursorLine] = useState<number | undefined>(undefined);
+  const editorRef = useRef<any>(null);
   
   const terminalInputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   
   const chatRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const monaco = useMonaco();
+  const monaco = useSafeMonaco();
 
-  useEffect(() => {
-    localStorage.setItem('omnichat_coder_projects', JSON.stringify(projects));
-  }, [projects]);
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
 
-  useEffect(() => {
-    localStorage.setItem('omnichat_coder_current_project', currentProjectId);
-  }, [currentProjectId]);
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const filesList = e.dataTransfer.files;
+    if (!filesList || filesList.length === 0) return;
+
+    const langMap: Record<string, string> = {
+      'js': 'javascript', 'ts': 'typescript', 'jsx': 'javascript', 'tsx': 'typescript',
+      'py': 'python', 'html': 'html', 'css': 'css', 'json': 'json', 'md': 'markdown',
+      'java': 'java', 'cpp': 'cpp', 'c': 'c', 'rs': 'rust', 'go': 'go', 'sh': 'shell',
+      'yaml': 'yaml', 'yml': 'yaml', 'xml': 'xml', 'svg': 'xml'
+    };
+
+    const newFiles: FileNode[] = [];
+    let lastNewId = '';
+
+    for (let i = 0; i < filesList.length; i++) {
+      const file = filesList[i];
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const isImg = file.type.startsWith('image/');
+
+      try {
+        let content = '';
+        if (isImg) {
+          content = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = err => reject(err);
+          });
+        } else {
+          content = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsText(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = err => reject(err);
+          });
+        }
+
+        const current = files.find(f => f.id === currentFileId);
+        const parentId = current?.type === 'folder' ? current.id : (current?.parentId || null);
+
+        const newId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 7);
+        const newFile: FileNode = {
+          id: newId,
+          name: file.name,
+          content: content,
+          language: isImg ? 'image' : (langMap[ext] || 'plaintext'),
+          type: 'file',
+          parentId
+        };
+        newFiles.push(newFile);
+        lastNewId = newId;
+
+      } catch (err) {
+        console.error('Failed to import file', file.name, err);
+      }
+    }
+
+    if (newFiles.length > 0) {
+      setFiles(prev => {
+        const updated = [...prev];
+        newFiles.forEach(nf => {
+          const sameIndex = updated.findIndex(f => f.name === nf.name && f.parentId === nf.parentId);
+          if (sameIndex !== -1) {
+            updated[sameIndex] = nf;
+          } else {
+            updated.push(nf);
+          }
+        });
+        return updated;
+      });
+
+      if (lastNewId) {
+        setCurrentFileId(lastNewId);
+      }
+
+      const importedNames = newFiles.map(nf => `\`${nf.name}\``).join(', ');
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString() + '_system',
+          role: 'model',
+          text: `📂 **Imported Workspace Files**:\nSuccessfully imported and mounted ${importedNames} into your active code environment. You can select and edit them directly in the sidebar explorer.`
+        }
+      ]);
+    }
+  };
+
+  // Periodic and unload auto-save for Coder projects and current project
+  usePeriodicAutoSave('omnichat_coder_projects', projects, {
+    intervalMs: 1500
+  });
+
+  usePeriodicAutoSave('omnichat_coder_current_project', currentProjectId, {
+    intervalMs: 1500
+  });
 
   useEffect(() => {
     setProjects(prev => prev.map(p => {
@@ -162,6 +278,11 @@ export const CoderMode: React.FC = () => {
   }, [messages, files, commits, currentProjectId]);
 
   const handleCreateProject = () => {
+    const currentProject = projects.find(p => p.id === currentProjectId);
+    if (currentProject && currentProject.messages.filter(m => m.role === 'user').length === 0) {
+      // Already an empty project exists (no user questions yet), just keep it focused
+      return;
+    }
     const newProject: CoderProject = {
       id: Date.now().toString(),
       title: 'New Project',
@@ -192,14 +313,15 @@ export const CoderMode: React.FC = () => {
   const handleDeleteProject = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (projects.length === 1) {
-      showToast('Cannot delete the last project.', 'warning');
+      alert('Cannot delete the last project.');
       return;
     }
-    const remaining = projects.filter(p => p.id !== id);
-    setProjects(remaining);
-    showToast('Project deleted', 'info');
-    if (currentProjectId === id) {
-      handleSwitchProject(remaining[0].id);
+    if (window.confirm('Are you sure you want to delete this project?')) {
+      const remaining = projects.filter(p => p.id !== id);
+      setProjects(remaining);
+      if (currentProjectId === id) {
+        handleSwitchProject(remaining[0].id);
+      }
     }
   };
 
@@ -593,15 +715,16 @@ export const CoderMode: React.FC = () => {
     const remainingFiles = files.filter(f => !idsToDelete.includes(f.id));
     
     if (remainingFiles.filter(f => f.type !== 'folder').length === 0) {
-      showToast('Cannot delete the last file.', 'warning');
+      alert('Cannot delete the last file.');
       return;
     }
     
-    setFiles(remainingFiles);
-    showToast('Item deleted', 'info');
-    if (idsToDelete.includes(currentFileId)) {
-      const nextFile = remainingFiles.find(f => f.type !== 'folder');
-      if (nextFile) setCurrentFileId(nextFile.id);
+    if (window.confirm('Are you sure you want to delete this item?')) {
+      setFiles(remainingFiles);
+      if (idsToDelete.includes(currentFileId)) {
+        const nextFile = remainingFiles.find(f => f.type !== 'folder');
+        if (nextFile) setCurrentFileId(nextFile.id);
+      }
     }
   };
 
@@ -615,26 +738,26 @@ export const CoderMode: React.FC = () => {
     };
     setCommits(prev => [newCommit, ...prev]);
     setCommitMessage('');
-    showToast('Commit created successfully', 'success');
   };
 
   const handlePull = () => {
     if (commits.length === 0) {
-      showToast('No commits to pull.', 'info');
+      alert('No commits to pull.');
       return;
     }
-    const latestCommit = commits[0];
-    setFiles(latestCommit.files);
-    
-    // Ensure currentFileId is valid
-    if (!latestCommit.files.find(f => f.id === currentFileId)) {
-      setCurrentFileId(latestCommit.files[0]?.id || '1');
+    if (window.confirm('This will overwrite your current files with the latest commit. Continue?')) {
+      const latestCommit = commits[0];
+      setFiles(latestCommit.files);
+      
+      // Ensure currentFileId is valid
+      if (!latestCommit.files.find(f => f.id === currentFileId)) {
+        setCurrentFileId(latestCommit.files[0]?.id || '1');
+      }
     }
-    showToast('Pulled latest commit files', 'success');
   };
 
   const handlePush = () => {
-    showToast('Changes pushed successfully! (Simulated)', 'success');
+    alert('Changes pushed successfully! (Simulated)');
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -643,7 +766,7 @@ export const CoderMode: React.FC = () => {
 
     const userMessage = input.trim();
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
-    setInput('');
+    clearInputDraft();
     setIsLoading(true);
 
     if (currentProject.title === 'New Project') {
@@ -673,7 +796,7 @@ export const CoderMode: React.FC = () => {
     try {
       const ai = getAiInstance();
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-image',
+        model: 'gemini-2.5-flash-image',
         contents: {
           parts: [
             {
@@ -698,10 +821,134 @@ export const CoderMode: React.FC = () => {
       }
     } catch (error) {
       console.error('Error generating image:', error);
-      showToast('Failed to generate image. Please try again.', 'error');
+      alert('Failed to generate image. Please try again.');
       setIsImageModalOpen(false);
     } finally {
       setIsGeneratingImage(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      // Alt+V or Ctrl+Alt+V triggers Voice-to-Code Assistant
+      if ((e.altKey && (e.key === 'v' || e.key === 'V')) || (e.ctrlKey && e.altKey && (e.key === 'v' || e.key === 'V'))) {
+        e.preventDefault();
+        if (editorRef.current) {
+          const sel = editorRef.current.getSelection();
+          if (sel && !sel.isEmpty()) {
+            const model = editorRef.current.getModel();
+            if (model) {
+              setSelectedText(model.getValueInRange(sel));
+            }
+          }
+        }
+        setIsVoiceToCodeOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, []);
+
+  const handleVoiceCodeInsert = (insertedCode: string, targetMode: InsertionTargetMode, newFileName?: string) => {
+    if (targetMode === 'new-file') {
+      const extByLang: Record<string, string> = {
+        typescript: 'ts', javascript: 'js', python: 'py', html: 'html', css: 'css', json: 'json', sql: 'sql', go: 'go', rust: 'rs', java: 'java', cpp: 'cpp'
+      };
+      const fname = newFileName?.trim() || `voice_snippet_${Date.now()}.${extByLang[language] || 'js'}`;
+      const ext = fname.split('.').pop() || '';
+      const langMap: Record<string, string> = {
+        'js': 'javascript', 'ts': 'typescript', 'jsx': 'javascript', 'tsx': 'typescript',
+        'py': 'python', 'html': 'html', 'css': 'css', 'json': 'json', 'md': 'markdown',
+        'go': 'go', 'rs': 'rust', 'java': 'java', 'cpp': 'cpp', 'sql': 'sql', 'sh': 'shell'
+      };
+      const newId = Date.now().toString();
+      const newFile: FileNode = {
+        id: newId,
+        name: fname,
+        content: insertedCode,
+        language: langMap[ext] || language || 'javascript',
+        type: 'file',
+        parentId: null
+      };
+      setFiles(prev => [...prev, newFile]);
+      setCurrentFileId(newId);
+      return;
+    }
+
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      const model = editor.getModel();
+      if (!model) {
+        setCode(insertedCode);
+        return;
+      }
+
+      if (targetMode === 'replace-file') {
+        const fullRange = model.getFullModelRange();
+        editor.executeEdits('voice-to-code', [{
+          range: fullRange,
+          text: insertedCode,
+          forceMoveMarkers: true
+        }]);
+        editor.focus();
+      } else if (targetMode === 'replace-selection') {
+        const selection = editor.getSelection();
+        if (selection && !selection.isEmpty()) {
+          editor.executeEdits('voice-to-code', [{
+            range: selection,
+            text: insertedCode,
+            forceMoveMarkers: true
+          }]);
+        } else {
+          const pos = editor.getPosition();
+          const range = pos 
+            ? { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }
+            : model.getFullModelRange();
+          editor.executeEdits('voice-to-code', [{
+            range: range,
+            text: insertedCode,
+            forceMoveMarkers: true
+          }]);
+        }
+        editor.focus();
+      } else if (targetMode === 'append') {
+        const lineCount = model.getLineCount();
+        const maxCol = model.getLineMaxColumn(lineCount);
+        editor.executeEdits('voice-to-code', [{
+          range: { startLineNumber: lineCount, startColumn: maxCol, endLineNumber: lineCount, endColumn: maxCol },
+          text: `\n\n${insertedCode}`,
+          forceMoveMarkers: true
+        }]);
+        editor.focus();
+      } else { // 'cursor'
+        const selection = editor.getSelection();
+        if (selection && !selection.isEmpty()) {
+          editor.executeEdits('voice-to-code', [{
+            range: selection,
+            text: insertedCode,
+            forceMoveMarkers: true
+          }]);
+        } else {
+          const pos = editor.getPosition();
+          const lineCount = model.getLineCount();
+          const maxCol = model.getLineMaxColumn(lineCount);
+          const range = pos 
+            ? { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column } 
+            : { startLineNumber: lineCount, startColumn: maxCol, endLineNumber: lineCount, endColumn: maxCol };
+          editor.executeEdits('voice-to-code', [{
+            range: range,
+            text: insertedCode,
+            forceMoveMarkers: true
+          }]);
+        }
+        editor.focus();
+      }
+    } else {
+      if (targetMode === 'replace-file') {
+        setCode(insertedCode);
+      } else {
+        setCode(code ? `${code}\n\n${insertedCode}` : insertedCode);
+      }
     }
   };
 
@@ -793,7 +1040,19 @@ export const CoderMode: React.FC = () => {
   };
 
   return (
-    <div className={`flex h-full w-full p-2 gap-2 ${isDarkMode ? 'text-white' : 'text-slate-900'} bg-transparent`}>
+    <div 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex h-full w-full p-2 gap-2 relative ${isDarkMode ? 'text-white' : 'text-slate-900'} bg-transparent`}
+    >
+      {isDragging && (
+        <div className="absolute inset-2 z-50 flex flex-col items-center justify-center bg-cyan-950/40 backdrop-blur-md border-2 border-dashed border-cyan-500 rounded-3xl pointer-events-none animate-pulse">
+          <Folder className="text-cyan-400 mb-2" size={48} />
+          <span className="text-xl font-bold text-cyan-200">Import Workspace Files</span>
+          <span className="text-sm text-cyan-400 mt-1">Drop code, text, or image files to import into the active project</span>
+        </div>
+      )}
       <Group orientation="horizontal" className="w-full h-full">
         
         {/* Leftmost Panel: Explorer & Git */}
@@ -930,73 +1189,178 @@ export const CoderMode: React.FC = () => {
 
         {/* Left Panel: Chat Interface */}
         <Panel defaultSize={25} minSize={20} className="flex flex-col h-full">
-          <div className={`flex flex-col h-full rounded-2xl overflow-hidden ${glassClass}`}>
-            <div className={`p-4 border-b ${isDarkMode ? 'border-white/10' : 'border-slate-200'} flex items-center gap-2 bg-black/10`}>
-              <Terminal size={18} className={getAccentClass()} />
-              <h2 className="font-semibold text-sm tracking-wide uppercase opacity-80">AI Coder Prompt</h2>
-            </div>
+          <div className={`flex h-full w-full rounded-2xl overflow-hidden ${glassClass}`}>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((msg, idx) => (
-                <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`max-w-[90%] rounded-2xl p-3.5 shadow-sm ${
-                    msg.role === 'user' 
-                      ? `${isDarkMode ? 'bg-white/15 text-white' : 'bg-slate-800 text-white'}` 
-                      : `${isDarkMode ? 'bg-black/40 text-white/90 border border-white/5' : 'bg-white/80 text-slate-800 border border-slate-200'}`
-                  }`}>
-                    {msg.role === 'user' ? (
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
-                    ) : (
-                      <div className={`prose prose-sm max-w-none ${isDarkMode ? 'prose-invert' : ''}`}>
-                        <ReactMarkdown>{msg.text}</ReactMarkdown>
-                      </div>
-                    )}
+            {/* Collapsible Chat History */}
+            <AnimatePresence initial={false}>
+              {showHistory && (
+                <motion.div
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 220, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+                  style={{ willChange: 'width, opacity' }}
+                  className={`flex flex-col h-full border-r overflow-hidden shrink-0 ${isDarkMode ? 'border-white/10 bg-black/30' : 'border-slate-200 bg-slate-50/50'}`}
+                >
+                  <div style={{ width: 220 }} className="flex flex-col h-full p-3">
+                    <div className="flex items-center justify-between mb-3 shrink-0">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider opacity-60 ${isDarkMode ? 'text-white' : 'text-slate-700'}`}>Coding History</span>
+                      <button
+                        type="button"
+                        onClick={handleCreateProject}
+                        title="New Chat"
+                        className={`p-1 rounded hover:bg-black/15 dark:hover:bg-white/15 transition-colors text-xs flex items-center gap-1 ${getAccentClass()}`}
+                      >
+                        <Plus size={14} /> <span className="text-[10px] font-semibold">New</span>
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 hide-scrollbar">
+                      {projects.map(project => {
+                        const messageCount = project.messages.length;
+                        return (
+                          <div
+                            key={project.id}
+                            onClick={() => handleSwitchProject(project.id)}
+                            className={`group flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all border ${
+                              currentProjectId === project.id
+                                ? (isDarkMode ? 'bg-white/10 border-white/20 text-white shadow-md' : 'bg-slate-200 border-slate-300 text-slate-900 shadow-sm')
+                                : (isDarkMode ? 'hover:bg-white/5 border-transparent text-white/60 hover:text-white' : 'hover:bg-slate-100 border-transparent text-slate-600 hover:text-slate-900')
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                              <MessageSquare size={13} className="shrink-0 opacity-50" />
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span className="text-xs truncate font-medium">{project.title}</span>
+                                <span className="text-[9px] opacity-40">{messageCount} {messageCount === 1 ? 'message' : 'messages'}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteProject(project.id, e)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500 transition-all ml-1 shrink-0"
+                              title="Delete Chat"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className={`flex items-center gap-2 text-sm ${isDarkMode ? 'text-white/50' : 'text-slate-500'} p-2`}>
-                  <Loader2 size={16} className="animate-spin" /> Generating code...
-                </div>
+                </motion.div>
               )}
-              <div ref={messagesEndRef} />
-            </div>
+            </AnimatePresence>
 
-            <form onSubmit={handleSendMessage} className={`p-3 border-t ${isDarkMode ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-white/40'}`}>
-              <div className="relative">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  placeholder="Describe what to build..."
-                  className={`w-full rounded-xl pl-4 pr-20 py-3 text-sm outline-none resize-none transition-all ${glassInputClass}`}
-                  rows={3}
-                />
-                <div className="absolute right-2 bottom-2 flex items-center gap-1">
+            {/* Chat Messages & Input */}
+            <div className="flex-1 flex flex-col h-full min-w-0">
+              <div className={`p-4 border-b ${isDarkMode ? 'border-white/10' : 'border-slate-200'} flex items-center justify-between bg-black/10 shrink-0`}>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold text-sm tracking-wide uppercase opacity-80 flex items-center gap-1.5">
+                    <Terminal size={16} className={getAccentClass()} />
+                    Coder Prompt
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={handleGenerateImage}
-                    disabled={isGeneratingImage}
-                    title="Generate Image (Placeholder)"
-                    className={`p-2 rounded-lg ${getAccentClass()} ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-200'} disabled:opacity-50 transition-colors`}
+                    onClick={handleCreateProject}
+                    title="New Coding Chat"
+                    className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-900'}`}
                   >
-                    <ImageIcon size={18} />
+                    <Plus size={16} />
                   </button>
                   <button
-                    type="submit"
-                    disabled={!input.trim() || isLoading}
-                    className={`p-2 rounded-lg ${getAccentClass()} ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-200'} disabled:opacity-50 transition-colors`}
+                    type="button"
+                    onClick={() => setShowHistory(!showHistory)}
+                    title="Toggle Chat History"
+                    className={`p-1 rounded-md transition-colors ${showHistory ? `bg-white/15 ${getAccentClass()}` : (isDarkMode ? 'text-white/60 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-200')}`}
                   >
-                    <Send size={18} />
+                    <MessageSquare size={16} />
                   </button>
                 </div>
               </div>
-            </form>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((msg, idx) => (
+                  <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`max-w-[90%] rounded-2xl p-3.5 shadow-sm ${
+                      msg.role === 'user' 
+                        ? `${isDarkMode ? 'bg-white/15 text-white' : 'bg-slate-800 text-white'}` 
+                        : `${isDarkMode ? 'bg-black/40 text-white/90 border border-white/5' : 'bg-white/80 text-slate-800 border border-slate-200'}`
+                    }`}>
+                      {msg.role === 'user' ? (
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>
+                      ) : (
+                        <div className={`prose prose-sm max-w-none ${isDarkMode ? 'prose-invert' : ''}`}>
+                          <ReactMarkdown>{msg.text}</ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {isLoading && (
+                  <div className={`flex items-center gap-2 text-sm ${isDarkMode ? 'text-white/50' : 'text-slate-500'} p-2`}>
+                    <Loader2 size={16} className="animate-spin" /> Generating code...
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <form onSubmit={handleSendMessage} className={`p-3 border-t ${isDarkMode ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-white/40'} shrink-0`}>
+                <div className="relative">
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder="Describe what to build..."
+                    className={`w-full rounded-xl pl-4 pr-20 py-3 text-sm outline-none resize-none transition-all ${glassInputClass}`}
+                    rows={3}
+                  />
+                  <div className="absolute right-2 bottom-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editorRef.current) {
+                          const sel = editorRef.current.getSelection();
+                          if (sel && !sel.isEmpty()) {
+                            setSelectedText(editorRef.current.getModel()?.getValueInRange(sel) || '');
+                          }
+                        }
+                        setIsVoiceToCodeOpen(true);
+                      }}
+                      title="Voice-to-Code (Alt+V)"
+                      className={`p-2 rounded-lg ${getAccentClass()} ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-200'} transition-colors relative group`}
+                    >
+                      <Mic size={18} className="text-cyan-400" />
+                      <span className="absolute -top-7 right-0 scale-0 group-hover:scale-100 transition-transform bg-slate-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow whitespace-nowrap pointer-events-none">
+                        Voice-to-Code (Alt+V)
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateImage}
+                      disabled={isGeneratingImage}
+                      title="Generate Image (Placeholder)"
+                      className={`p-2 rounded-lg ${getAccentClass()} ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-200'} disabled:opacity-50 transition-colors`}
+                    >
+                      <ImageIcon size={18} />
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || isLoading}
+                      className={`p-2 rounded-lg ${getAccentClass()} ${isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-200'} disabled:opacity-50 transition-colors`}
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         </Panel>
 
@@ -1011,9 +1375,10 @@ export const CoderMode: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Code2 size={18} className={getAccentClass()} />
                 <span className="text-sm font-semibold tracking-wide uppercase opacity-80">Workspace</span>
+                <span className="text-xs opacity-40 font-mono">({currentFile?.name})</span>
               </div>
               
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button onClick={handleExplain} className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`} title="Explain Code">
                   <HelpCircle size={16} />
                 </button>
@@ -1043,6 +1408,23 @@ export const CoderMode: React.FC = () => {
                       theme={editorTheme}
                       value={code}
                       onChange={(val) => setCode(val || '')}
+                      onMount={(editor) => {
+                        editorRef.current = editor;
+                        editor.onDidChangeCursorSelection(() => {
+                          const selection = editor.getSelection();
+                          if (selection && !selection.isEmpty()) {
+                            const model = editor.getModel();
+                            if (model) {
+                              setSelectedText(model.getValueInRange(selection));
+                            }
+                          } else {
+                            setSelectedText('');
+                          }
+                        });
+                        editor.onDidChangeCursorPosition((e) => {
+                          setCursorLine(e.position.lineNumber);
+                        });
+                      }}
                       options={{
                         minimap: { enabled: false },
                         fontSize: 14,
@@ -1288,6 +1670,17 @@ export const CoderMode: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Voice-to-Code Modal */}
+      <VoiceToCodeModal
+        isOpen={isVoiceToCodeOpen}
+        onClose={() => setIsVoiceToCodeOpen(false)}
+        activeFileName={currentFile?.name || 'index.js'}
+        activeLanguage={language}
+        currentCode={code}
+        selectedCode={selectedText}
+        cursorLine={cursorLine}
+        onInsertCode={handleVoiceCodeInsert}
+      />
     </div>
   );
 };

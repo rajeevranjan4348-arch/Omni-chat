@@ -1,26 +1,117 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Message } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { Bot, User, Volume2, Loader2, Square, Check, CheckCheck, Brain, BookOpen, Globe, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  Bot, User, Volume2, Loader2, Square, Check, CheckCheck, FileText, 
+  Archive, Download, Copy, ThumbsUp, ThumbsDown, Share2, MoreHorizontal, 
+  Edit2, RefreshCw, Trash2, Pin, PinOff, ScanEye
+} from 'lucide-react';
 import { generateSpeech } from '../services/gemini';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { motion } from 'motion/react';
+import { OcrModal } from './OcrModal';
 
 interface ChatMessageProps {
   message: Message;
+  onEdit?: (messageId: string, newText: string) => void;
+  onRegenerate?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onExport?: (message: Message) => void;
+  onPin?: (messageId: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
-  const { isDarkMode } = useTheme();
-  const { userProfile, activePersona } = useSettings();
+export const ChatMessage: React.FC<ChatMessageProps> = ({ 
+  message,
+  onEdit,
+  onRegenerate,
+  onDelete,
+  onExport,
+  onPin
+}) => {
+  const { isDarkMode, getBorderClass } = useTheme();
+  const { userProfile } = useSettings();
   const isUser = message.role === 'user';
-  
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
-  
-  const [showMemoriesDrawer, setShowMemoriesDrawer] = useState(false);
-  const [selectedSourceSnippet, setSelectedSourceSnippet] = useState<string | null>(null);
+
+  const [isLiked, setIsLiked] = useState(false);
+  const [isDisliked, setIsDisliked] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.text);
+  const [ocrActiveImage, setOcrActiveImage] = useState<{ src: string; name: string; type: string } | null>(null);
+
+  const [displayedText, setDisplayedText] = useState(isUser ? message.text : '');
+
+  useEffect(() => {
+    if (isUser) {
+      setDisplayedText(message.text);
+      return;
+    }
+
+    let isCancelled = false;
+    let index = displayedText.length;
+    
+    if (message.text.length < displayedText.length) {
+      setDisplayedText(message.text);
+      return;
+    }
+
+    const typeNextCharacter = () => {
+      if (isCancelled) return;
+
+      if (index < message.text.length) {
+        const remainingLength = message.text.length - index;
+        const step = remainingLength > 50 ? 5 : remainingLength > 20 ? 3 : 1;
+        
+        index += step;
+        setDisplayedText(message.text.slice(0, index));
+        
+        const delay = message.isStreaming ? 10 : 5;
+        setTimeout(typeNextCharacter, delay);
+      }
+    };
+
+    typeNextCharacter();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [message.text, isUser, message.isStreaming]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: 'OmniChat AI Response',
+        text: message.text,
+      }).catch((err) => console.log('Error sharing:', err));
+    } else {
+      handleCopy();
+    }
+  };
+
+  const handleLike = () => {
+    setIsLiked(!isLiked);
+    if (!isLiked) {
+      setIsDisliked(false);
+    }
+  };
+
+  const handleDislike = () => {
+    setIsDisliked(!isDisliked);
+    if (!isDisliked) {
+      setIsLiked(false);
+    }
+  };
 
   const handlePlayAudio = async () => {
     if (isPlaying && audioElement) {
@@ -77,7 +168,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   };
 
   return (
-    <div className={`flex gap-3 sm:gap-4 p-2 sm:p-4 ${isUser ? 'flex-row-reverse' : 'flex-row'} group`}>
+    <motion.div 
+      initial={{ opacity: 0, x: isUser ? 24 : -24, y: 8 }}
+      animate={{ opacity: 1, x: 0, y: 0 }}
+      transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+      className={`flex gap-3 sm:gap-4 p-2 sm:p-4 ${isUser ? 'flex-row-reverse' : 'flex-row'} group`}
+    >
       <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm overflow-hidden ${isUser ? (isDarkMode ? 'bg-indigo-600 text-white' : 'bg-indigo-500 text-white') : (isDarkMode ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-white')}`}>
         {isUser ? (
           userProfile.avatarUrl ? (
@@ -88,52 +184,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             <User size={18} />
           )
         ) : (
-          activePersona.avatar ? (
-            <span className="text-base sm:text-lg select-none">{activePersona.avatar}</span>
-          ) : (
-            <Bot size={18} />
-          )
+          <Bot size={18} />
         )}
       </div>
       
       <div className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
-        {/* Message meta header */}
-        <div className={`flex items-center gap-2 mb-1.5 px-1 flex-wrap`}>
+        <div className={`flex items-center gap-2 mb-1.5 px-1`}>
           <span className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-            {isUser ? (userProfile.name || 'You') : activePersona.name}
+            {isUser ? (userProfile.name || 'You') : 'OmniChat AI'}
           </span>
-
-          {/* Interactive Memory Recall Badge */}
-          {!isUser && message.recalledMemories && message.recalledMemories.length > 0 && (
-            <button 
-              onClick={() => setShowMemoriesDrawer(!showMemoriesDrawer)}
-              className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium transition-all ${
-                isDarkMode 
-                  ? 'bg-purple-950/70 text-purple-300 border border-purple-800/70 hover:border-purple-600' 
-                  : 'bg-purple-50 text-purple-700 border border-purple-200 hover:border-purple-300'
-              }`}
-              title="Click to view memories recalled for this response"
-            >
-              <Brain size={11} className="text-purple-400" />
-              <span>{message.recalledMemories.length} recalled</span>
-              {showMemoriesDrawer ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-            </button>
-          )}
-
-          {/* Retrieved Knowledge Base Sources Badge */}
-          {!isUser && message.retrievedSources && message.retrievedSources.length > 0 && (
-            <span 
-              className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                isDarkMode 
-                  ? 'bg-blue-950/70 text-blue-300 border border-blue-800/70' 
-                  : 'bg-blue-50 text-blue-700 border border-blue-200'
-              }`}
-            >
-              <BookOpen size={10} className="text-blue-400" />
-              <span>{message.retrievedSources.length} KB sources</span>
-            </span>
-          )}
-
           {message.timestamp && (
             <div className={`text-[10px] ${isDarkMode ? 'text-slate-500' : 'text-slate-400'} flex items-center gap-1`}>
               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -150,104 +209,335 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
               )}
             </div>
           )}
+          {onPin && (
+            <button
+              onClick={() => onPin(message.id)}
+              className={`p-0.5 rounded transition-all ${
+                message.pinned
+                  ? 'text-violet-500 opacity-100'
+                  : 'opacity-0 group-hover/bubble:opacity-100 text-slate-400 hover:text-slate-200'
+              }`}
+              title={message.pinned ? "Unpin message" : "Pin message to top"}
+            >
+              <Pin size={11} className={message.pinned ? 'fill-violet-500' : ''} />
+            </button>
+          )}
         </div>
-
-        {/* Recalled Memory Accordion Drawer */}
-        {!isUser && showMemoriesDrawer && message.recalledMemories && (
-          <div className={`w-full mb-2 p-2.5 rounded-xl border text-xs animate-in slide-in-from-top-1 duration-150 ${
-            isDarkMode ? 'bg-purple-950/40 border-purple-800/60 text-purple-200' : 'bg-purple-50 border-purple-200 text-purple-900'
-          }`}>
-            <div className="flex items-center justify-between mb-1.5 font-semibold text-[11px]">
-              <span className="flex items-center gap-1 text-purple-400">
-                <Brain size={12} />
-                Memories that informed this response:
-              </span>
-              <button 
-                onClick={() => setShowMemoriesDrawer(false)}
-                className="text-[10px] opacity-70 hover:opacity-100"
-              >
-                Hide
-              </button>
-            </div>
-            <div className="space-y-1">
-              {message.recalledMemories.map((mem, idx) => (
-                <div key={idx} className="flex items-start gap-1.5 text-[11px]">
-                  <span className="opacity-60">•</span>
-                  <span>{mem}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         
-        {/* Message Bubble */}
-        <div className="relative group/bubble w-full">
+        <div className="relative group/bubble" id={`msg-${message.id}`}>
+          {message.pinned && (
+            <div 
+              className={`absolute -top-2 ${isUser ? '-left-2' : '-right-2'} bg-violet-600 text-white p-1 rounded-full shadow-lg border border-violet-400/50 z-10 flex items-center justify-center`}
+              title="Pinned message"
+            >
+              <Pin size={10} className="fill-white" />
+            </div>
+          )}
           <div className={`px-4 py-3 sm:px-5 sm:py-4 rounded-2xl shadow-sm ${
             isUser 
               ? (isDarkMode ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-indigo-500 text-white rounded-tr-sm')
               : (isDarkMode ? 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700' : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200')
           }`}>
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="flex flex-col gap-2 mb-3 max-w-full">
+                {message.attachments.map((att, i) => {
+                  const hasBase64 = !!att.base64;
+                  const dataUrl = hasBase64 ? `data:${att.type};base64,${att.base64}` : '';
+                  if (att.type.startsWith('image/') && hasBase64) {
+                    return (
+                      <div key={i} className="relative group/img max-w-xs inline-block">
+                        <img 
+                          src={dataUrl} 
+                          alt={att.name} 
+                          className="max-w-xs max-h-60 rounded-lg object-contain bg-black/5 border border-white/10" 
+                        />
+                        <button
+                          onClick={() => {
+                            setOcrActiveImage({
+                              src: att.base64,
+                              name: att.name,
+                              type: att.type
+                            });
+                          }}
+                          className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/75 hover:bg-cyan-600 text-white text-[10px] font-bold border border-white/20 shadow-lg opacity-80 group-hover/img:opacity-100 transition-all cursor-pointer"
+                          title="Extract Text (OCR)"
+                        >
+                          <ScanEye size={12} className="text-cyan-400 group-hover/img:text-white" />
+                          <span>Scan OCR</span>
+                        </button>
+                      </div>
+                    );
+                  } else if (att.type.startsWith('video/') && hasBase64) {
+                    return (
+                      <video 
+                        key={i} 
+                        src={dataUrl} 
+                        controls 
+                        className="max-w-xs max-h-60 rounded-lg bg-black/5 border border-white/10" 
+                      />
+                    );
+                  } else {
+                    const isPdf = att.type === 'application/pdf';
+                    const isZip = att.type.includes('zip') || att.type.includes('compressed') || att.name.endsWith('.zip');
+                    const itemClasses = `flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-medium transition-colors max-w-xs ${
+                      isUser
+                        ? 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                        : (isDarkMode ? 'bg-slate-900/60 border-slate-700 text-slate-200 hover:bg-slate-900/80' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100')
+                    }`;
+                    if (hasBase64) {
+                      return (
+                        <a 
+                          key={i} 
+                          href={dataUrl} 
+                          download={att.name}
+                          className={itemClasses}
+                        >
+                          {isPdf ? (
+                            <FileText size={18} className={isUser ? 'text-white' : 'text-red-400'} />
+                          ) : isZip ? (
+                            <Archive size={18} className={isUser ? 'text-white' : 'text-amber-400'} />
+                          ) : (
+                            <FileText size={18} className={isUser ? 'text-white' : 'text-slate-400'} />
+                          )}
+                          <span className="truncate flex-1">{att.name}</span>
+                          <Download size={14} className="shrink-0 opacity-60" />
+                        </a>
+                      );
+                    } else {
+                      return (
+                        <div 
+                          key={i} 
+                          className={`${itemClasses} opacity-85`}
+                          title="File metadata preserved"
+                        >
+                          {isPdf ? (
+                            <FileText size={18} className={isUser ? 'text-white' : 'text-red-400'} />
+                          ) : isZip ? (
+                            <Archive size={18} className={isUser ? 'text-white' : 'text-amber-400'} />
+                          ) : (
+                            <FileText size={18} className={isUser ? 'text-white' : 'text-slate-400'} />
+                          )}
+                          <span className="truncate flex-1">{att.name} (Uploaded)</span>
+                        </div>
+                      );
+                    }
+                  }
+                })}
+              </div>
+            )}
             {message.isStreaming && !message.text ? (
               <div className="flex items-center gap-1.5 h-6 px-2">
-                <div className={`w-2 h-2 rounded-full animate-bounce ${isUser ? 'bg-white/70' : 'bg-emerald-500'}`} style={{ animationDelay: '0ms' }}></div>
-                <div className={`w-2 h-2 rounded-full animate-bounce ${isUser ? 'bg-white/70' : 'bg-emerald-500'}`} style={{ animationDelay: '150ms' }}></div>
-                <div className={`w-2 h-2 rounded-full animate-bounce ${isUser ? 'bg-white/70' : 'bg-emerald-500'}`} style={{ animationDelay: '300ms' }}></div>
+                <div className={`w-2 h-2 rounded-full animate-bounce ${isUser ? 'bg-white/70' : (isDarkMode ? 'bg-emerald-500' : 'bg-emerald-500')}`} style={{ animationDelay: '0ms' }}></div>
+                <div className={`w-2 h-2 rounded-full animate-bounce ${isUser ? 'bg-white/70' : (isDarkMode ? 'bg-emerald-500' : 'bg-emerald-500')}`} style={{ animationDelay: '150ms' }}></div>
+                <div className={`w-2 h-2 rounded-full animate-bounce ${isUser ? 'bg-white/70' : (isDarkMode ? 'bg-emerald-500' : 'bg-emerald-500')}`} style={{ animationDelay: '300ms' }}></div>
+              </div>
+            ) : isEditing ? (
+              <div className="space-y-3 w-full min-w-[240px] sm:min-w-[320px] py-1">
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  className={`w-full p-3 text-sm rounded-xl border outline-none focus:ring-2 font-sans transition-all duration-200 resize-none ${
+                    isDarkMode 
+                      ? 'bg-slate-900 border-slate-700 focus:ring-indigo-500 text-slate-100 placeholder-slate-500' 
+                      : 'bg-slate-50 border-slate-200 focus:ring-indigo-500 text-slate-900 placeholder-slate-400'
+                  }`}
+                  rows={Math.max(3, editText.split('\n').length)}
+                  placeholder="Edit message..."
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      setIsEditing(false);
+                      setEditText(message.text);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      isDarkMode ? 'bg-slate-700 hover:bg-slate-650 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (onEdit) onEdit(message.id, editText);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500 hover:bg-indigo-600 text-white transition-colors shadow-md shadow-indigo-500/10"
+                  >
+                    Save
+                  </button>
+                </div>
               </div>
             ) : (
-              <MarkdownRenderer content={message.text} forceInvert={isUser} />
+              <MarkdownRenderer content={displayedText} forceInvert={isUser} />
             )}
           </div>
-          
+
           {!isUser && !message.isStreaming && message.text && (
-            <button 
-              onClick={handlePlayAudio}
-              disabled={isGenerating}
-              className={`absolute -right-10 top-2 p-1.5 rounded-full transition-all opacity-0 group-hover/bubble:opacity-100 focus:opacity-100 ${isDarkMode ? 'bg-slate-800 text-slate-400 hover:text-emerald-400 hover:bg-slate-700 border border-slate-700' : 'bg-white text-slate-400 hover:text-emerald-500 hover:bg-slate-50 border border-slate-200 shadow-sm'}`}
-              title="Read aloud"
-            >
-              {isGenerating ? <Loader2 size={14} className="animate-spin" /> : 
-               isPlaying ? <Square size={14} className="fill-current" /> : <Volume2 size={14} />}
-            </button>
+            <div className="flex items-center gap-1 mt-2 text-slate-400 select-none animate-fade-in">
+              {/* Pin */}
+              <button
+                onClick={() => onPin && onPin(message.id)}
+                className={`p-1.5 rounded-lg transition-all ${
+                  message.pinned
+                    ? 'text-violet-500 bg-violet-500/10'
+                    : isDarkMode ? 'hover:text-slate-100 hover:bg-slate-800' : 'hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title={message.pinned ? "Unpin message" : "Pin message to top"}
+              >
+                <Pin size={14} className={message.pinned ? 'fill-violet-500/20' : ''} />
+              </button>
+
+              {/* Copy */}
+              <button
+                onClick={handleCopy}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isDarkMode 
+                    ? 'hover:text-slate-100 hover:bg-slate-800' 
+                    : 'hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title="Copy response"
+              >
+                {copied ? <Check size={14} className="text-emerald-500 animate-pulse" /> : <Copy size={14} />}
+              </button>
+
+              {/* Like */}
+              <button
+                onClick={handleLike}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isLiked 
+                    ? 'text-emerald-500' 
+                    : isDarkMode ? 'hover:text-slate-100 hover:bg-slate-800' : 'hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title="Like"
+              >
+                <ThumbsUp size={14} className={isLiked ? 'fill-emerald-500/20' : ''} />
+              </button>
+
+              {/* Dislike */}
+              <button
+                onClick={handleDislike}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isDisliked 
+                    ? 'text-rose-500' 
+                    : isDarkMode ? 'hover:text-slate-100 hover:bg-slate-800' : 'hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title="Dislike"
+              >
+                <ThumbsDown size={14} className={isDisliked ? 'fill-rose-500/20' : ''} />
+              </button>
+
+              {/* Speak / Text-to-Speech */}
+              <button
+                onClick={handlePlayAudio}
+                disabled={isGenerating}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isPlaying 
+                    ? 'text-indigo-500' 
+                    : isDarkMode ? 'hover:text-slate-100 hover:bg-slate-800' : 'hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title={isPlaying ? "Stop playing" : "Speak text"}
+              >
+                {isGenerating ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : isPlaying ? (
+                  <Square size={14} className="fill-indigo-500/10" />
+                ) : (
+                  <Volume2 size={14} />
+                )}
+              </button>
+
+              {/* Share */}
+              <button
+                onClick={handleShare}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isDarkMode 
+                    ? 'hover:text-slate-100 hover:bg-slate-800' 
+                    : 'hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title="Share"
+              >
+                <Share2 size={14} />
+              </button>
+
+              {/* More Actions Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    showMenu
+                      ? isDarkMode ? 'bg-slate-800 text-slate-100' : 'bg-slate-100 text-slate-800'
+                      : isDarkMode ? 'hover:text-slate-100 hover:bg-slate-800' : 'hover:text-slate-800 hover:bg-slate-100'
+                  }`}
+                  title="More options"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+
+                {showMenu && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
+                    <div className={`absolute left-0 mt-1 w-36 rounded-xl border shadow-xl z-40 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-1 ${
+                      isDarkMode 
+                        ? 'bg-slate-850 border-slate-700 text-slate-200' 
+                        : 'bg-white border-slate-200 text-slate-700'
+                    }`}>
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          setIsEditing(true);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
+                          isDarkMode ? 'hover:bg-slate-800 hover:text-white' : 'hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Edit2 size={13} />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          if (onRegenerate) onRegenerate(message.id);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
+                          isDarkMode ? 'hover:bg-slate-800 hover:text-white' : 'hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <RefreshCw size={13} />
+                        Regenerate
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          if (onDelete) onDelete(message.id);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center gap-2 transition-colors text-rose-500 ${
+                          isDarkMode ? 'hover:bg-rose-950/30' : 'hover:bg-rose-50'
+                        }`}
+                      >
+                        <Trash2 size={13} />
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          if (onExport) onExport(message);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
+                          isDarkMode ? 'hover:bg-slate-800 hover:text-white' : 'hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Download size={13} />
+                        Export
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </div>
-
-        {/* Retrieved Knowledge Base Source Cards */}
-        {!isUser && message.retrievedSources && message.retrievedSources.length > 0 && (
-          <div className="mt-2 w-full space-y-1.5">
-            <div className="flex flex-wrap gap-1.5">
-              {message.retrievedSources.map((src, idx) => (
-                <button 
-                  key={idx}
-                  onClick={() => setSelectedSourceSnippet(selectedSourceSnippet === src.snippet ? null : (src.snippet || null))}
-                  className={`text-[11px] px-2.5 py-1 rounded-lg border flex items-center gap-1.5 transition-all text-left ${
-                    selectedSourceSnippet === src.snippet
-                      ? (isDarkMode ? 'bg-blue-900/60 border-blue-500 text-blue-200' : 'bg-blue-100 border-blue-400 text-blue-800')
-                      : (isDarkMode ? 'bg-slate-800/80 border-slate-700 text-slate-300 hover:border-slate-600' : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300')
-                  }`}
-                  title="Click to toggle excerpt snippet"
-                >
-                  {src.type === 'doc' ? <BookOpen size={11} className="text-blue-400 shrink-0" /> : <Globe size={11} className="text-emerald-400 shrink-0" />}
-                  <span className="font-medium truncate max-w-[200px] sm:max-w-[280px]">{src.title}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Snippet preview drawer */}
-            {selectedSourceSnippet && (
-              <div className={`p-2.5 rounded-xl border text-xs font-mono animate-in slide-in-from-top-1 duration-150 ${
-                isDarkMode ? 'bg-slate-900/90 border-blue-800/60 text-slate-300' : 'bg-blue-50/80 border-blue-200 text-slate-800'
-              }`}>
-                <div className="flex justify-between items-center text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">
-                  <span>Knowledge Base Excerpt:</span>
-                  <button onClick={() => setSelectedSourceSnippet(null)} className="hover:text-white">Close</button>
-                </div>
-                <p className="leading-relaxed">{selectedSourceSnippet}</p>
-              </div>
-            )}
-          </div>
-        )}
         
-        {/* Google Grounding Chunks */}
         {message.groundingChunks && message.groundingChunks.length > 0 && (
           <div className={`mt-2 flex flex-wrap gap-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
             {message.groundingChunks.map((chunk, idx) => {
@@ -270,6 +560,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           </div>
         )}
       </div>
-    </div>
+
+      {ocrActiveImage && (
+        <OcrModal
+          isOpen={!!ocrActiveImage}
+          onClose={() => setOcrActiveImage(null)}
+          imageSrc={ocrActiveImage.src}
+          mimeType={ocrActiveImage.type}
+          fileName={ocrActiveImage.name}
+        />
+      )}
+    </motion.div>
   );
 };
+

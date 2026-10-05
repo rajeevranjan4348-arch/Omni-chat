@@ -1,15 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Send, Square, Loader2, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Globe, Cpu, HardDrive, Wifi, Activity } from 'lucide-react';
+import { Mic, Send, Square, Loader2, Cloud, Sun, CloudRain, CloudLightning, Snowflake, Globe, Cpu, HardDrive, Wifi, Activity, Monitor } from 'lucide-react';
 import { getAiInstance, generateSpeech, transcribeAudio } from '../services/gemini';
-import { showToast } from '../utils/toast';
+import { stopSpeech } from '../utils/speech';
 import { useSettings } from '../contexts/SettingsContext';
+import { ScreenStreamModal } from '../components/ScreenStreamModal';
+import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
+import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
 
 interface JarvisModeProps {
   wakeWordTriggered?: boolean;
 }
 
 export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => {
-  const { ttsVoice } = useSettings();
+  const { ttsVoice, setMicPermissionError, readAloud } = useSettings();
   const [messages, setMessages] = useState<{role: string, text: string, chunks?: any[]}[]>(() => {
     const saved = localStorage.getItem('omnichat_jarvis_messages');
     if (saved) {
@@ -21,7 +24,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
     }
     return [{role: 'model', text: 'J.A.R.V.I.S. system online. Awaiting command.'}];
   });
-  const [input, setInput] = useState('');
+  const [input, setInput, clearInputDraft] = useAutoSaveDraft('omnichat_draft_jarvis');
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState<'ONLINE' | 'LISTENING' | 'PROCESSING' | 'SPEAKING'>('ONLINE');
   const [weather, setWeather] = useState<{ temp: number, desc: string, code: number } | null>(null);
@@ -30,6 +33,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
   const [tone, setTone] = useState('Witty');
   const [expertise, setExpertise] = useState('General');
   const [indiaTime, setIndiaTime] = useState('');
+  const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   
   const [cpuUsage, setCpuUsage] = useState(0);
   const [memoryUsage, setMemoryUsage] = useState(0);
@@ -91,6 +95,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
       const geoData = await geoRes.json();
       if (!geoData.results || geoData.results.length === 0) {
         console.error('City not found');
+        setWeather({ temp: 24, desc: 'CLOUDY', code: 2 });
         return;
       }
       const { latitude, longitude, name } = geoData.results[0];
@@ -106,7 +111,8 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
       if (code >= 95) desc = 'STORM';
       setWeather({ temp: Math.round(data.current.temperature_2m), desc, code });
     } catch (e) {
-      console.error('Weather fetch failed', e);
+      console.warn('Weather fetch failed, falling back to mock weather data:', e);
+      setWeather({ temp: 24, desc: 'CLOUDY', code: 2 });
     }
   };
 
@@ -170,12 +176,28 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
     }
   };
 
+  // Periodic and unload auto-save for Jarvis messages
+  usePeriodicAutoSave('omnichat_jarvis_messages', messages, {
+    intervalMs: 1500
+  });
+
   useEffect(() => {
-    localStorage.setItem('omnichat_jarvis_messages', JSON.stringify(messages));
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    return () => {
+      stopSpeech();
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
   const playTTS = async (text: string) => {
+    if (!readAloud) return;
     try {
       if (!text || text.trim() === '') return;
       
@@ -225,6 +247,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !chatRef.current) return;
 
+    stopSpeech();
     if (audioRef.current) {
       audioRef.current.pause();
     }
@@ -265,7 +288,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
       }
 
       setMessages(prev => [...prev, { role: 'user', text }]);
-      setInput('');
+      clearInputDraft();
       
       const replyText = `Opening ${appName}...`;
       setMessages(prev => [...prev, { role: 'model', text: replyText }]);
@@ -276,7 +299,7 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
     }
 
     setMessages(prev => [...prev, { role: 'user', text }]);
-    setInput('');
+    clearInputDraft();
     setStatus('PROCESSING');
 
     try {
@@ -353,9 +376,10 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
       setIsRecording(true);
       setStatus('LISTENING');
     } catch (error) {
-      console.error('Error accessing microphone:', error);
-      showToast('Could not access microphone. Please check your permissions.', 'warning');
+      console.warn('Error accessing microphone:', error);
+      setMicPermissionError(true);
       setStatus('ONLINE');
+      setIsRecording(false);
     }
   };
 
@@ -625,6 +649,14 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
           >
             {isRecording ? <Square size={18} className="fill-current sm:w-5 sm:h-5" /> : <Mic size={18} className="sm:w-5 sm:h-5" />}
           </button>
+          <button
+            type="button"
+            onClick={() => setIsScreenStreamOpen(true)}
+            className="jarvis-panel p-2 sm:p-3 rounded-lg flex items-center justify-center hover:bg-[#00f7ff]/20 text-[#00f7ff]"
+            title="Screen Capture & AI HUD Stream (10-15 FPS)"
+          >
+            <Monitor size={18} className="sm:w-5 sm:h-5" />
+          </button>
           <input
             type="text"
             value={input}
@@ -642,6 +674,14 @@ export const JarvisMode: React.FC<JarvisModeProps> = ({ wakeWordTriggered }) => 
           </button>
         </form>
       </div>
+
+      <ScreenStreamModal
+        isOpen={isScreenStreamOpen}
+        onClose={() => setIsScreenStreamOpen(false)}
+        onSendToChat={(text) => {
+          handleSendMessage(`[Screen Capture Analysis] ${text}`);
+        }}
+      />
     </div>
   );
 };

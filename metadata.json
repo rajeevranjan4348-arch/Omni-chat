@@ -1,6 +1,8 @@
 {
   "name": "OmniChat AI",
-  "description": "Next-generation multi-modal AI super-agent featuring GPT Astra with 270 capabilities across 20 domains, 13-stage autonomous execution flow, voice, vision, and security sandboxing.",
+  "description": "A multi-modal AI chatbot featuring text, voice, search grounding, Google Workspace integrations, and more.",
   "requestFramePermissions": ["camera", "microphone", "geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

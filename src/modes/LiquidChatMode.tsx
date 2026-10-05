@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Mic, Send, Code, Search, FileText, Zap, Brain, Eye, Upload, X, Loader, Sparkles, Star, Trash2, Copy, Volume2, VolumeX, Download, Plus, Pin, PinOff, Edit2, RefreshCw, Palette, BookOpen, ChevronRight, Check, CheckCheck, User, Bot, MoreHorizontal, Command, Maximize2, Minimize2, BarChart2, Activity, Quote, Play, Hash, Square } from 'lucide-react';
+import { Mic, Send, Code, Search, FileText, Zap, Brain, Eye, Upload, X, Loader, Sparkles, Star, Trash2, Copy, Volume2, VolumeX, Download, Plus, Pin, PinOff, Edit2, RefreshCw, Palette, BookOpen, ChevronRight, Check, CheckCheck, User, Bot, MoreHorizontal, Command, Maximize2, Minimize2, BarChart2, Activity, Quote, Play, Hash, Square, MessageSquare, Briefcase } from 'lucide-react';
 import { getAiInstance, transcribeAudio, generateSpeech } from '../services/gemini';
-import { showToast } from '../utils/toast';
+import { speakText, stopSpeech } from '../utils/speech';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { motion, AnimatePresence } from 'motion/react';
+import { WorkspaceWidget } from '../components/WorkspaceWidget';
+import { sounds, triggerHaptic } from '../components/PremiumEffects';
+import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
+import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
 
 // ─── THEMES ──────────────────────────────────────────────
 const T = {
@@ -51,55 +56,175 @@ function NeuralGrid({ active, a1 }: { active: boolean, a1: string }) {
     const ctx = c.getContext('2d');
     if (!ctx) return;
     
-    let W = c.width = c.offsetWidth;
-    let H = c.height = c.offsetHeight;
+    const dpr = window.devicePixelRatio || 1;
+    let W = c.offsetWidth;
+    let H = c.offsetHeight;
+    c.width = W * dpr;
+    c.height = H * dpr;
+    ctx.scale(dpr, dpr);
     const t0 = Date.now();
-    let dots: {x: number, y: number, ph: number}[] = [];
     
-    const initDots = () => {
-      dots = [];
-      const cols = Math.floor(W / 36), rows = Math.floor(H / 36);
-      for (let x = 0; x < cols; x++)
-        for (let y = 0; y < rows; y++)
-          dots.push({ x: x * 36 + 18, y: y * 36 + 18, ph: Math.random() * Math.PI * 2 });
+    interface GridDot {
+      baseX: number;
+      baseY: number;
+      x: number;
+      y: number;
+      ph: number;
+    }
+    
+    let grid: GridDot[][] = [];
+    const cellSize = 38;
+    
+    const initGrid = () => {
+      grid = [];
+      const cols = Math.ceil(W / cellSize) + 1;
+      const rows = Math.ceil(H / cellSize) + 1;
+      for (let x = 0; x < cols; x++) {
+        grid[x] = [];
+        for (let y = 0; y < rows; y++) {
+          grid[x][y] = {
+            baseX: x * cellSize,
+            baseY: y * cellSize,
+            x: x * cellSize,
+            y: y * cellSize,
+            ph: Math.random() * Math.PI * 2
+          };
+        }
+      }
     };
-    initDots();
+    initGrid();
 
     const hexToRgb = (hex: string) => { const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); return r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : '0,217,255'; };
     const rgb = hexToRgb(a1);
     
+    let mouse = { x: -1000, y: -1000, targetX: -1000, targetY: -1000, radius: 150, active: false };
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = c.getBoundingClientRect();
+      mouse.targetX = e.clientX - rect.left;
+      mouse.targetY = e.clientY - rect.top;
+      mouse.active = true;
+    };
+    
+    const handleMouseLeave = () => {
+      mouse.active = false;
+      mouse.targetX = -1000;
+      mouse.targetY = -1000;
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseleave', handleMouseLeave);
+    
     const draw = () => {
       const t = (Date.now() - t0) / 1000;
       ctx.clearRect(0, 0, W, H);
-      dots.forEach(d => {
-        const wave = (Math.sin(t * 0.6 + d.ph) * 0.5 + 0.5) * (active ? (Math.sin(t * 4 + d.ph) * 0.3 + 0.7) : 0.5);
-        ctx.beginPath(); ctx.arc(d.x, d.y, 1.3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb},${wave * 0.4})`; ctx.fill();
-      });
-      for (let i = 0; i < dots.length; i++)
-        for (let j = i + 1; j < dots.length; j++) {
-          const dx = dots[i].x - dots[j].x, dy = dots[i].y - dots[j].y;
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < 52) {
-            const a = (1 - d / 52) * 0.1 * (Math.sin(t * 0.5 + dots[i].ph) * 0.5 + 0.5);
-            ctx.beginPath(); ctx.moveTo(dots[i].x, dots[i].y); ctx.lineTo(dots[j].x, dots[j].y);
-            ctx.strokeStyle = `rgba(${rgb},${a})`; ctx.lineWidth = 0.7; ctx.stroke();
+      
+      // Interpolate mouse smoothly
+      if (mouse.active) {
+        mouse.x += (mouse.targetX - mouse.x) * 0.12;
+        mouse.y += (mouse.targetY - mouse.y) * 0.12;
+      } else {
+        mouse.x += (-1000 - mouse.x) * 0.12;
+        mouse.y += (-1000 - mouse.y) * 0.12;
+      }
+
+      const cols = grid.length;
+      const rows = cols > 0 ? grid[0].length : 0;
+
+      // Update positions
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          const d = grid[x][y];
+          const waveX = Math.sin(t * 0.6 + d.ph) * 3.5;
+          const waveY = Math.cos(t * 0.5 + d.ph) * 3.5;
+          
+          const dx = d.baseX - mouse.x;
+          const dy = d.baseY - mouse.y;
+          const dist = Math.hypot(dx, dy);
+          let dispX = 0;
+          let dispY = 0;
+          if (dist < mouse.radius && mouse.active) {
+            const force = (1 - dist / mouse.radius) * 16;
+            const angle = Math.atan2(dy, dx);
+            dispX = Math.cos(angle) * force;
+            dispY = Math.sin(angle) * force;
+          }
+          
+          d.x = d.baseX + waveX + dispX;
+          d.y = d.baseY + waveY + dispY;
+        }
+      }
+
+      // Draw grid connections (O(N) operation instead of O(N^2))
+      ctx.lineWidth = 0.8;
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          const d = grid[x][y];
+          
+          if (x < cols - 1) {
+            const r = grid[x + 1][y];
+            const mDist = Math.hypot(d.x - mouse.x, d.y - mouse.y);
+            const mouseFactor = (mouse.active && mDist < mouse.radius) ? (1 - mDist / mouse.radius) * 1.5 : 0;
+            const alpha = (0.06 + mouseFactor * 0.16) * (Math.sin(t * 0.5 + d.ph) * 0.3 + 0.7);
+            
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(r.x, r.y);
+            ctx.strokeStyle = `rgba(${rgb},${alpha})`;
+            ctx.stroke();
+          }
+          
+          if (y < rows - 1) {
+            const b = grid[x][y + 1];
+            const mDist = Math.hypot(d.x - mouse.x, d.y - mouse.y);
+            const mouseFactor = (mouse.active && mDist < mouse.radius) ? (1 - mDist / mouse.radius) * 1.5 : 0;
+            const alpha = (0.06 + mouseFactor * 0.16) * (Math.sin(t * 0.5 + d.ph) * 0.3 + 0.7);
+            
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = `rgba(${rgb},${alpha})`;
+            ctx.stroke();
           }
         }
+      }
+
+      // Draw dots
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          const d = grid[x][y];
+          const wave = (Math.sin(t * 0.6 + d.ph) * 0.5 + 0.5) * (active ? (Math.sin(t * 4 + d.ph) * 0.3 + 0.7) : 0.5);
+          const mDist = Math.hypot(d.x - mouse.x, d.y - mouse.y);
+          const size = (mouse.active && mDist < mouse.radius) ? 1.5 + (1 - mDist / mouse.radius) * 1.5 : 1.3;
+          const extraAlpha = (mouse.active && mDist < mouse.radius) ? (1 - mDist / mouse.radius) * 0.4 : 0;
+          
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, size, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${rgb},${wave * 0.4 + extraAlpha})`;
+          ctx.fill();
+        }
+      }
+
       raf.current = requestAnimationFrame(draw);
     };
     draw();
 
     const resizeObserver = new ResizeObserver(() => {
       if (!c) return;
-      W = c.width = c.offsetWidth;
-      H = c.height = c.offsetHeight;
-      initDots();
+      const currentDpr = window.devicePixelRatio || 1;
+      W = c.offsetWidth;
+      H = c.offsetHeight;
+      c.width = W * currentDpr;
+      c.height = H * currentDpr;
+      ctx.scale(currentDpr, currentDpr);
+      initGrid();
     });
     resizeObserver.observe(c);
 
     return () => { 
       if (raf.current) cancelAnimationFrame(raf.current); 
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseleave', handleMouseLeave);
       resizeObserver.disconnect();
     };
   }, [active, a1]);
@@ -134,7 +259,39 @@ function StatusBars({ status, color }: { status: 'idle'|'thinking'|'speaking'|'l
 // ─── Markdown renderer ─────────────────────────────────
 function MD({ text, accent }: { text: string, accent: string }) {
   const [cc, setCc] = useState<string | null>(null);
-  const lines = text.split('\n');
+  const [displayedText, setDisplayedText] = useState('');
+
+  useEffect(() => {
+    let isCancelled = false;
+    let index = displayedText.length;
+    
+    if (text.length < displayedText.length) {
+      setDisplayedText(text);
+      return;
+    }
+
+    const typeNextCharacter = () => {
+      if (isCancelled) return;
+
+      if (index < text.length) {
+        const remainingLength = text.length - index;
+        const step = remainingLength > 50 ? 5 : remainingLength > 20 ? 3 : 1;
+        
+        index += step;
+        setDisplayedText(text.slice(0, index));
+        
+        setTimeout(typeNextCharacter, 10);
+      }
+    };
+
+    typeNextCharacter();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [text]);
+
+  const lines = displayedText.split('\n');
   const parts = []; let inCode=false, lang='', codeLines: string[]=[], i=0;
   while (i < lines.length) {
     const l = lines[i];
@@ -278,7 +435,7 @@ function CmdPalette({ theme, onAction, onClose, sessions, setSession, setMode }:
 
 // ─── Main Component ────────────────────────────────────
 export const LiquidChatMode: React.FC = () => {
-  const { userProfile } = useSettings();
+  const { userProfile, setMicPermissionError, readAloud, ttsVoice } = useSettings();
   const [sessions, setSessions] = useState<any[]>(() => {
     const saved = localStorage.getItem('omnichat_liquid_sessions');
     if (saved) {
@@ -293,36 +450,133 @@ export const LiquidChatMode: React.FC = () => {
   });
 
   const activeSession = sessions.find(s => s.id === currentSession) || sessions[0];
-  const [messages, setMessages] = useState<any[]>(activeSession.messages || []);
+  const [messages, setMessages] = useState<any[]>(activeSession?.messages || []);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showWorkspace, setShowWorkspace] = useState(false);
 
   useEffect(() => {
-    setSessions(prev => prev.map(s => s.id === currentSession ? { ...s, messages, updatedAt: Date.now() } : s));
+    setSessions(prev => prev.map(s => {
+      if (s.id === currentSession) {
+        let name = s.name;
+        if (name === 'New Session' || name === 'Current Session') {
+          const firstUserMsg = messages.find(m => m.role === 'user');
+          if (firstUserMsg) {
+            name = firstUserMsg.content.substring(0, 30);
+            if (firstUserMsg.content.length > 30) name += '...';
+          }
+        }
+        return { ...s, name, messages, updatedAt: Date.now() };
+      }
+      return s;
+    }));
   }, [messages, currentSession]);
 
-  useEffect(() => {
-    localStorage.setItem('omnichat_liquid_sessions', JSON.stringify(sessions));
-  }, [sessions]);
+  // Periodic and unload auto-save for Liquid chat sessions & active session
+  usePeriodicAutoSave('omnichat_liquid_sessions', sessions, {
+    intervalMs: 1500
+  });
+
+  usePeriodicAutoSave('omnichat_liquid_current_session', currentSession, {
+    intervalMs: 1500
+  });
 
   useEffect(() => {
-    localStorage.setItem('omnichat_liquid_current_session', currentSession);
     const session = sessions.find(s => s.id === currentSession);
     if (session) {
       setMessages(session.messages || []);
     }
+    stopSpeech();
   }, [currentSession]);
 
+  useEffect(() => {
+    return () => {
+      stopSpeech();
+    };
+  }, []);
+
+  // Listen for + New Chat event from Sidebar
+  useEffect(() => {
+    const handleNewChat = () => {
+      const newSession = { id: Date.now().toString(), name: 'New Session', messages: [], updatedAt: Date.now() };
+      setSessions(prev => [newSession, ...prev]);
+      setCurrentSession(newSession.id);
+      setMessages([]);
+    };
+    window.addEventListener('omnichat-new-chat', handleNewChat);
+    return () => window.removeEventListener('omnichat-new-chat', handleNewChat);
+  }, []);
+
   const createNewSession = () => {
+    if (activeSession && activeSession.messages.length === 0) {
+      // Already an empty session exists, just keep it focused
+      return;
+    }
     const newSession = { id: Date.now().toString(), name: 'New Session', messages: [], updatedAt: Date.now() };
     setSessions(prev => [newSession, ...prev]);
     setCurrentSession(newSession.id);
   };
 
-  const [input, setInput] = useState('');
+  const deleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Delete this session?')) {
+      const remaining = sessions.filter(s => s.id !== id);
+      if (remaining.length === 0) {
+        const defaultSession = { id: '1', name: 'New Session', messages: [], updatedAt: Date.now() };
+        setSessions([defaultSession]);
+        setCurrentSession('1');
+      } else {
+        setSessions(remaining);
+        if (currentSession === id) {
+          setCurrentSession(remaining[0].id);
+        }
+      }
+    }
+  };
+
+  const [input, setInput, clearInputDraft] = useAutoSaveDraft('omnichat_draft_liquidchat');
   const [status, setStatus] = useState<'idle'|'thinking'|'speaking'|'listening'>('idle');
   const [mode, setMode] = useState('chat');
   const [themeKey, setThemeKey] = useState<keyof typeof T>('void');
   const [showCmd, setShowCmd] = useState(false);
   const [showStats, setShowStats] = useState(false);
+
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'kimi-k3'>(() => {
+    return (localStorage.getItem('omnichat_selected_model_liquid') as 'gemini' | 'kimi-k3') || 'gemini';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('omnichat_selected_model_liquid', selectedModel);
+  }, [selectedModel]);
+
+  const togglePinMessage = (msgId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    sounds.playClick();
+    triggerHaptic('light');
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, pinned: !m.pinned } : m));
+  };
+
+  const scrollToMessage = (msgId: string) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-cyan-400', 'ring-offset-2', 'ring-offset-black', 'rounded-2xl');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-cyan-400', 'ring-offset-2', 'ring-offset-black', 'rounded-2xl');
+      }, 2000);
+    }
+  };
+
+  const pinnedMessages = messages.filter(m => m.pinned);
+
+  // Listen to global workspace assistant text insertion events
+  useEffect(() => {
+    const handleWorkspaceInsert = (e: Event) => {
+      const text = (e as CustomEvent).detail;
+      setInput(prev => prev + (prev ? '\n' : '') + text);
+    };
+    window.addEventListener('workspace-insert-text', handleWorkspaceInsert);
+    return () => window.removeEventListener('workspace-insert-text', handleWorkspaceInsert);
+  }, []);
   const [tokenTotal, setTokenTotal] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   
@@ -359,7 +613,7 @@ export const LiquidChatMode: React.FC = () => {
             }
           } catch (error) {
             console.error('Transcription error:', error);
-            showToast('Failed to transcribe audio. Please try again.', 'error');
+            alert('Failed to transcribe audio. Please try again.');
           } finally {
             setStatus('idle');
           }
@@ -372,9 +626,10 @@ export const LiquidChatMode: React.FC = () => {
       setIsRecording(true);
       setStatus('listening');
     } catch (error) {
-      console.error('Error accessing microphone:', error);
-      showToast('Could not access microphone. Please check your permissions.', 'warning');
+      console.warn('Error accessing microphone:', error);
+      setMicPermissionError(true);
       setStatus('idle');
+      setIsRecording(false);
     }
   };
 
@@ -400,18 +655,86 @@ export const LiquidChatMode: React.FC = () => {
   const handleSend = async () => {
     if (!input.trim() || status !== 'idle') return;
     
+    sounds.playClick();
+    triggerHaptic('light');
+
     const userMsgId = Date.now().toString();
     const userMsg = { id: userMsgId, role: 'user', content: input, mode: activeMode.id, timestamp: new Date(), status: 'sent' };
     setMessages(prev => [...prev, userMsg]);
-    setInput('');
+    const inputVal = input;
+    clearInputDraft();
     setStatus('thinking');
-    setTokenTotal(prev => prev + est(input));
+    setTokenTotal(prev => prev + est(inputVal));
+
+    if (selectedModel === 'kimi-k3') {
+      const assistantMsgId = (Date.now() + 1).toString() + '_ast';
+      setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '', mode: activeMode.id, timestamp: new Date() }]);
+      
+      try {
+        const { streamKimiK3Response } = await import('../services/kimiK3');
+        let thinkingSteps: string[] = [];
+        let liveThinking = '';
+        let answerText = '';
+
+        const updateUI = () => {
+          const stepsPart = thinkingSteps.map(s => `> \`${s}\``).join('\n');
+          const reasoningPart = liveThinking ? `\n> \n> 🧠 **Thinking Process:**\n> ${liveThinking.trim().replace(/\n/g, '\n> ')}` : '';
+          const formattedThinking = (stepsPart || reasoningPart) ? `${stepsPart}${reasoningPart}\n\n` : '';
+          setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: formattedThinking + answerText } : m));
+        };
+
+        await streamKimiK3Response(
+          inputVal,
+          [],
+          {
+            onThinkingStep: (stepText, isDone) => {
+              thinkingSteps.push(stepText);
+              updateUI();
+            },
+            onThinkingChunk: (chunk) => {
+              liveThinking += chunk;
+              updateUI();
+            },
+            onTextChunk: (chunk) => {
+              answerText += chunk;
+              updateUI();
+            },
+            onComplete: (full) => {
+              answerText = full;
+              updateUI();
+              setMessages(prev => prev.map(m => m.id === userMsgId ? { ...m, status: 'read' } : m));
+              setTokenTotal(prev => prev + est(full));
+              sounds.playSuccess();
+              triggerHaptic('success');
+              
+              if (readAloud && full) {
+                speakText(full, ttsVoice);
+              }
+            },
+            onError: (err: any) => {
+              answerText += `\n\n**Error:** ${err?.message ?? 'Something went wrong.'}`;
+              updateUI();
+              sounds.playError();
+              triggerHaptic('error');
+            }
+          }
+        );
+      } catch (error) {
+        console.error(error);
+        sounds.playError();
+        triggerHaptic('error');
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: 'Error loading Kimi-K3 service.' } : m));
+      } finally {
+        setStatus('idle');
+      }
+      return;
+    }
 
     try {
       const ai = getAiInstance();
       const response = await ai.models.generateContent({
         model: 'gemini-3.1-flash-lite-preview',
-        contents: input,
+        contents: inputVal,
         config: {
           systemInstruction: activeMode.sys
         }
@@ -419,12 +742,21 @@ export const LiquidChatMode: React.FC = () => {
       
       const replyText = response.text;
       setTokenTotal(prev => prev + est(replyText));
+      sounds.playSuccess();
+      triggerHaptic('success');
+
       setMessages(prev => {
         const updated = prev.map(m => m.id === userMsgId ? { ...m, status: 'read' } : m);
         return [...updated, { id: Date.now().toString(), role: 'assistant', content: replyText, mode: activeMode.id, timestamp: new Date() }];
       });
+      
+      if (readAloud && replyText) {
+        speakText(replyText, ttsVoice);
+      }
     } catch (error) {
       console.error(error);
+      sounds.playError();
+      triggerHaptic('error');
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: 'Error generating response.', mode: activeMode.id, timestamp: new Date() }]);
     } finally {
       setStatus('idle');
@@ -512,22 +844,39 @@ export const LiquidChatMode: React.FC = () => {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '10px',
+              color: '#fff',
+              fontSize: '12px',
+              padding: '8px 10px',
+              cursor: 'pointer',
+              outline: 'none',
+              marginRight: '4px'
+            }}
+          >
+            <option value="gemini" style={{ background: '#111' }}>♊ Gemini 3.5</option>
+            <option value="kimi-k3" style={{ background: '#111' }}>👑 Kimi-K3</option>
+          </select>
+          <button onClick={() => setShowHistory(!showHistory)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: showHistory ? `${theme.a1}20` : 'rgba(255,255,255,0.05)', border: `1px solid ${showHistory ? theme.a1 : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showHistory ? theme.a1 : 'rgba(255,255,255,0.7)', cursor: 'pointer' }} title="Toggle Chat History">
+            <MessageSquare size={16} />
+          </button>
           <button onClick={createNewSession} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', background: `rgba(255,255,255,0.05)`, border: `1px solid ${theme.a1}40`, color: theme.a1, fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> New
           </button>
-          <button onClick={() => setShowCmd(true)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
-            <Command size={16} />
-          </button>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowStats(!showStats)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
-              <BarChart2 size={16} />
-            </button>
-            {showStats && <StatsPanel messages={messages} tokenTotal={tokenTotal} accent={theme.a1} onClose={() => setShowStats(false)} />}
-          </div>
         </div>
       </div>
 
-      {/* Modes Bar */}
+      {/* Main Content Area with Optional Sidebar */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative', zIndex: 10 }}>
+        {/* Chat Column */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Modes Bar */}
       <div className="hide-scroll" style={{ padding: '0 20px 10px', display: 'flex', gap: '8px', overflowX: 'auto', zIndex: 10 }}>
         {MODES.map(m => (
           <button key={m.id} onClick={() => setMode(m.id)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '100px', background: mode === m.id ? `${m.color}20` : 'rgba(255,255,255,0.03)', border: `1px solid ${mode === m.id ? m.color : 'rgba(255,255,255,0.05)'}`, color: mode === m.id ? m.color : 'rgba(255,255,255,0.5)', fontSize: '13px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>
@@ -535,6 +884,47 @@ export const LiquidChatMode: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* Pinned Messages Bar */}
+      {pinnedMessages.length > 0 && (
+        <div className="shrink-0 border-b border-white/10 bg-black/40 backdrop-blur-md px-4 py-2 flex flex-col gap-1.5 z-10">
+          <div className="flex items-center justify-between text-xs font-semibold text-cyan-300">
+            <div className="flex items-center gap-1.5">
+              <Pin size={13} className="text-cyan-400 fill-cyan-400/40" />
+              <span>Anchored / Pinned Messages ({pinnedMessages.length})</span>
+            </div>
+            <button 
+              onClick={() => setMessages(prev => prev.map(m => ({ ...m, pinned: false })))}
+              className="text-[10px] text-cyan-400/70 hover:text-cyan-200 underline transition-colors"
+            >
+              Unpin All
+            </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto py-1 hide-scrollbar">
+            {pinnedMessages.map((pm) => (
+              <div
+                key={pm.id}
+                onClick={() => scrollToMessage(pm.id)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-black/60 text-xs text-white shrink-0 max-w-[280px] cursor-pointer hover:bg-black/80 transition-all group shadow-sm"
+              >
+                <span className="shrink-0 font-bold text-[10px] uppercase text-cyan-300">
+                  {pm.role === 'user' ? 'You' : 'Rishi'}:
+                </span>
+                <span className="truncate flex-1 text-slate-200 text-[11px]">
+                  {pm.content || 'Pinned message'}
+                </span>
+                <button
+                  onClick={(e) => togglePinMessage(pm.id, e)}
+                  className="p-1 rounded-md text-cyan-400/60 hover:text-red-300 hover:bg-red-500/20 transition-all"
+                  title="Unpin message"
+                >
+                  <PinOff size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Chat Area */}
       <div className="hide-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -550,7 +940,14 @@ export const LiquidChatMode: React.FC = () => {
             const msgTime = msg.timestamp ? new Date(msg.timestamp) : null;
             
             return (
-              <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+              <motion.div 
+                key={msg.id}
+                id={`msg-${msg.id}`}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', width: '100%', position: 'relative' }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', opacity: 0.6 }}>
                   {isUser ? (
                     <>
@@ -567,8 +964,23 @@ export const LiquidChatMode: React.FC = () => {
                       <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Rishi</span>
                     </>
                   )}
+                  <button
+                    onClick={(e) => togglePinMessage(msg.id, e)}
+                    style={{ background: 'none', border: 'none', color: msg.pinned ? activeMode.color : 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                    title={msg.pinned ? "Unpin message" : "Pin message to top"}
+                  >
+                    {msg.pinned ? <Pin size={12} className="fill-current" /> : <Pin size={12} />}
+                  </button>
                 </div>
-                <div style={{ maxWidth: '85%', padding: '16px 20px', borderRadius: '20px', background: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.4)', border: `1px solid ${isUser ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)'}`, borderBottomRightRadius: isUser ? '4px' : '20px', borderBottomLeftRadius: !isUser ? '4px' : '20px', fontSize: '14.5px', lineHeight: 1.6, boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                <div style={{ maxWidth: '85%', padding: '16px 20px', borderRadius: '20px', background: isUser ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.4)', border: `1px solid ${isUser ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)'}`, borderBottomRightRadius: isUser ? '4px' : '20px', borderBottomLeftRadius: !isUser ? '4px' : '20px', fontSize: '14.5px', lineHeight: 1.6, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', position: 'relative' }}>
+                  {msg.pinned && (
+                    <div 
+                      className="absolute -top-2 -right-2 bg-cyan-500 text-black p-1 rounded-full shadow-lg border border-cyan-300 z-10 flex items-center justify-center"
+                      title="Pinned message"
+                    >
+                      <Pin size={10} className="fill-black" />
+                    </div>
+                  )}
                   {isUser ? (
                     <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
                   ) : (
@@ -579,7 +991,7 @@ export const LiquidChatMode: React.FC = () => {
                   )}
                 </div>
                 {msgTime && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', opacity: 0.5, fontSize: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', opacity: 0.5, fontSize: '10px' }}>
                     <span>{msgTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     {isUser ? (
                       <span title={msg.status || 'sent'}>
@@ -602,7 +1014,8 @@ export const LiquidChatMode: React.FC = () => {
                     )}
                   </div>
                 )}
-              </div>
+              </motion.div>
+
             );
           })
         )}
@@ -611,6 +1024,14 @@ export const LiquidChatMode: React.FC = () => {
 
       {/* Input Area */}
       <div style={{ padding: '20px', zIndex: 10 }}>
+        {showWorkspace && (
+          <div style={{ marginBottom: '12px', width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+            <WorkspaceWidget 
+              onInsertText={(text) => {}} // globally handled via workspace-insert-text event
+              onClose={() => setShowWorkspace(false)}
+            />
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 10px 8px', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
           <span>~{est(input)} tok</span>
           <span>{tokenTotal} sent • {costStr(tokenTotal)}</span>
@@ -633,8 +1054,12 @@ export const LiquidChatMode: React.FC = () => {
               >
                 {isRecording ? <Square size={18} className="fill-current" /> : <Mic size={18} />}
               </button>
-              <button style={{ width: '36px', height: '36px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}>
-                <Upload size={18} />
+              <button 
+                onClick={() => setShowWorkspace(!showWorkspace)}
+                style={{ width: '36px', height: '36px', borderRadius: '12px', background: showWorkspace ? `${theme.a1}22` : 'rgba(255,255,255,0.05)', border: showWorkspace ? `1px solid ${theme.a1}44` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: showWorkspace ? theme.a1 : 'rgba(255,255,255,0.6)', cursor: 'pointer', transition: 'all 0.2s' }}
+                title="Google Workspace Assistant"
+              >
+                <Briefcase size={18} />
               </button>
               <button onClick={handleSend} disabled={!input.trim() || status !== 'idle'} style={{ width: '36px', height: '36px', borderRadius: '12px', background: input.trim() ? theme.a1 : 'rgba(255,255,255,0.05)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: input.trim() ? '#000' : 'rgba(255,255,255,0.3)', cursor: input.trim() ? 'pointer' : 'default', transition: 'all 0.2s' }}>
                 <Send size={16} style={{ transform: 'translateX(1px) translateY(1px)' }} />
@@ -648,6 +1073,78 @@ export const LiquidChatMode: React.FC = () => {
           </div>
         </div>
       </div>
+
+      </div> {/* closes Chat Column */}
+
+      {/* Sidebar History Panel */}
+      <AnimatePresence initial={false}>
+        {showHistory && (
+          <motion.div 
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 260, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+            className="glass-panel" 
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'rgba(10, 15, 30, 0.6)',
+              backdropFilter: 'blur(20px)',
+              height: '100%',
+              overflow: 'hidden',
+              willChange: 'width, opacity'
+            }}
+          >
+            <div style={{ width: 260, display: 'flex', flexDirection: 'column', height: '100%', flexShrink: 0 }}>
+              <div style={{ padding: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.a1 }}>Sessions</span>
+                <button 
+                  onClick={createNewSession}
+                  style={{ background: 'none', border: 'none', color: theme.a1, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="New Session"
+                >
+                  <Plus size={15} />
+                </button>
+              </div>
+              <div className="hide-scroll" style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {sessions.map(s => (
+                  <div 
+                    key={s.id}
+                    onClick={() => setCurrentSession(s.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      background: s.id === currentSession ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      border: `1px solid ${s.id === currentSession ? 'rgba(255,255,255,0.1)' : 'transparent'}`,
+                      transition: 'all 0.2s',
+                      minWidth: 0
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                      <MessageSquare size={14} style={{ color: theme.a1, opacity: 0.7, flexShrink: 0 }} />
+                      <span style={{ fontSize: '13px', color: s.id === currentSession ? '#fff' : 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                    </div>
+                    <button 
+                      onClick={(e) => deleteSession(s.id, e)}
+                      style={{ background: 'none', border: 'none', color: 'rgba(239, 68, 68, 0.7)', cursor: 'pointer', padding: '2px', flexShrink: 0 }}
+                      title="Delete Session"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div> {/* closes Main Content Area with Optional Sidebar */}
 
       {showCmd && <CmdPalette theme={theme} onAction={handleAction} onClose={() => setShowCmd(false)} sessions={sessions} setSession={setCurrentSession} setMode={setMode} />}
     </div>

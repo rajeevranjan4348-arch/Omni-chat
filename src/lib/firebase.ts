@@ -284,7 +284,6 @@ export const syncVoiceCommands = async (localCommands: any[]): Promise<any[]> =>
           id: id,
           title: localItem.title || 'Voice Command',
           source: localItem.source || 'voice-live',
-          type: localItem.type || 'voice',
           text: localItem.text || '',
           messages: localItem.messages || [{ role: 'user', text: localItem.text || '' }],
           updatedAt: localTime
@@ -329,7 +328,6 @@ export const saveVoiceCommandToCloud = async (command: any) => {
       id: id,
       title: command.title || 'Voice Command',
       source: command.source || 'voice-live',
-      type: command.type || 'voice',
       text: command.text || '',
       messages: command.messages || [{ role: 'user', text: command.text || '' }],
       updatedAt: time
@@ -413,8 +411,6 @@ export const syncVoiceSessions = async (localSessions: any[]): Promise<any[]> =>
           model: localItem.model || 'Gemini 3.1 Flash Live',
           hasRecording: localItem.hasRecording || false,
           audioMimeType: localItem.audioMimeType || '',
-          type: localItem.type || 'voice',
-          history: Array.isArray(localItem.history) ? localItem.history : [],
           updatedAt: localTime
         };
         uploadPromises.push(setDoc(docRef, payload));
@@ -464,8 +460,6 @@ export const saveVoiceSessionToCloud = async (session: any) => {
       model: session.model || 'Gemini 3.1 Flash Live',
       hasRecording: session.hasRecording || false,
       audioMimeType: session.audioMimeType || '',
-      type: session.type || 'voice',
-      history: Array.isArray(session.history) ? session.history : [],
       updatedAt: time
     });
   } catch (error) {
@@ -500,5 +494,81 @@ export const clearVoiceSessionsFromCloud = async () => {
     await Promise.all(promises);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+// --- Synchronize & Manage Chat History in Cloud (Firestore) ---
+export const saveChatHistoryToCloud = async (chat: any) => {
+  const user = auth.currentUser;
+  if (!user || !chat?.id) return;
+  const path = `users/${user.uid}/chat_history/${chat.id}`;
+  try {
+    const docRef = doc(db, 'users', user.uid, 'chat_history', chat.id);
+    const time = chat.updatedAt ? (typeof chat.updatedAt === 'number' ? chat.updatedAt : new Date(chat.updatedAt).getTime()) : Date.now();
+    await setDoc(docRef, {
+      userId: user.uid,
+      id: chat.id,
+      title: chat.title || 'Chat Session',
+      source: chat.source || 'omni-chat',
+      messagesCount: (chat.messages || []).length,
+      lastMessage: (chat.messages || []).slice(-1)[0]?.text || '',
+      updatedAt: time
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getChatHistoryFromCloud = async (): Promise<any[]> => {
+  const user = auth.currentUser;
+  if (!user) return [];
+  const path = `users/${user.uid}/chat_history`;
+  try {
+    const snapshot = await getDocs(collection(db, 'users', user.uid, 'chat_history'));
+    const list: any[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
+    return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+// --- Synchronize & Manage Stored File Metadata in Cloud (Firestore) ---
+export const saveStoredFileToCloud = async (fileMetadata: any) => {
+  const user = auth.currentUser;
+  if (!user || !fileMetadata?.id) return;
+  const path = `users/${user.uid}/stored_files/${fileMetadata.id}`;
+  try {
+    const docRef = doc(db, 'users', user.uid, 'stored_files', fileMetadata.id);
+    const time = fileMetadata.updatedAt || Date.now();
+    await setDoc(docRef, {
+      userId: user.uid,
+      id: fileMetadata.id,
+      name: fileMetadata.name,
+      size: fileMetadata.size || 0,
+      mimeType: fileMetadata.mimeType || 'application/octet-stream',
+      url: fileMetadata.url || '',
+      source: fileMetadata.source || 'OmniChat File',
+      description: fileMetadata.description || '',
+      updatedAt: time
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getStoredFilesFromCloud = async (): Promise<any[]> => {
+  const user = auth.currentUser;
+  if (!user) return [];
+  const path = `users/${user.uid}/stored_files`;
+  try {
+    const snapshot = await getDocs(collection(db, 'users', user.uid, 'stored_files'));
+    const list: any[] = [];
+    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
+    return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
   }
 };

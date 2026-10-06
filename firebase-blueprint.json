@@ -60,6 +60,38 @@
         "updatedAt": { "type": "number", "description": "Unix timestamp in milliseconds of when this session was last updated" }
       },
       "required": ["userId", "id", "title", "status", "duration", "updatedAt"]
+    },
+    "ChatHistory": {
+      "title": "ChatHistory",
+      "description": "Synced chat conversation history in Firestore",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The Firebase UID of the user who owns this chat" },
+        "id": { "type": "string", "description": "Unique session ID" },
+        "title": { "type": "string", "description": "Title of the chat" },
+        "source": { "type": "string", "description": "Source mode of the conversation" },
+        "messagesCount": { "type": "number", "description": "Total message count" },
+        "lastMessage": { "type": "string", "description": "Summary of last message" },
+        "updatedAt": { "type": "number", "description": "Unix timestamp in milliseconds" }
+      },
+      "required": ["userId", "id", "title", "updatedAt"]
+    },
+    "StoredFile": {
+      "title": "StoredFile",
+      "description": "Metadata for stored files, datasets, transcripts, and documents in Firestore",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The Firebase UID of the user who owns this file" },
+        "id": { "type": "string", "description": "Unique file ID" },
+        "name": { "type": "string", "description": "File name" },
+        "size": { "type": "number", "description": "File size in bytes" },
+        "mimeType": { "type": "string", "description": "MIME type" },
+        "url": { "type": "string", "description": "Download or view URL" },
+        "source": { "type": "string", "description": "Originating tool or mode" },
+        "description": { "type": "string", "description": "File description or extract" },
+        "updatedAt": { "type": "number", "description": "Unix timestamp in milliseconds" }
+      },
+      "required": ["userId", "id", "name", "updatedAt"]
     }
   },
   "firestore": {
@@ -78,6 +110,14 @@
     "users/{userId}/voice_sessions/{sessionId}": {
       "schema": "VoiceSession",
       "description": "Voice sessions with secure metadata, transcription, and status tracking"
+    },
+    "users/{userId}/chat_history/{chatId}": {
+      "schema": "ChatHistory",
+      "description": "User chat conversation history"
+    },
+    "users/{userId}/stored_files/{fileId}": {
+      "schema": "StoredFile",
+      "description": "Metadata for stored user files and documents"
     }
   }
 }

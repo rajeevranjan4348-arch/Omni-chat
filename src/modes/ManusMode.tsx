@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Home } from '../components/manus/Home';
 import { ChatView } from '../components/manus/ChatView';
 import { WebsiteBuilderView } from '../components/manus/WebsiteBuilderView';
+import { ManusLogo } from '../components/manus/Logo';
 import { useManusAgent } from '../hooks/useManusAgent';
 import { AnimatePresence, motion } from 'motion/react';
 import { Plus, Trash2, History, X, Cpu, FileText, BarChart3, Globe } from 'lucide-react';
@@ -18,6 +19,7 @@ export const ManusMode: React.FC = () => {
     previewUrl,
     srcDoc,
     isLoading,
+    messages,
     startTask,
     sendMessage,
     resetTask,
@@ -59,35 +61,50 @@ export const ManusMode: React.FC = () => {
       
       {/* ── Main Workspace Content Area ── */}
       <div className="flex-1 h-full min-h-0 overflow-hidden relative flex flex-col">
-        {/* Simple top bar with history control / plus control */}
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
-            className="bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-300 text-xs px-2.5 py-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm focus:outline-none focus:border-blue-500 cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-zinc-850"
-          >
-            <option value="gemini">♊ Gemini 3.5</option>
-            <option value="kimi-k3">👑 Kimi-K3 (Super Reasoning)</option>
-          </select>
+        {/* Manus Top Brand & Control Bar */}
+        <div className="h-14 border-b border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shrink-0 z-30 shadow-xs">
+          <div className="flex items-center gap-3">
+            <ManusLogo showBadge={true} />
+            <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium border border-blue-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              Autonomous Agent
+            </span>
+          </div>
 
-          <button
-            onClick={createNewSession}
-            className="p-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-850 text-gray-700 dark:text-zinc-300 transition-all flex items-center gap-1.5 text-xs font-semibold"
-            title="New Chat Session"
-          >
-            <Plus size={14} className="text-blue-500" />
-            <span className="hidden sm:inline">New Chat</span>
-          </button>
-          
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className={`p-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-850 text-gray-700 dark:text-zinc-300 transition-all flex items-center gap-1 ${
-              showHistory ? 'ring-2 ring-blue-500/50' : ''
-            }`}
-            title="Toggle History Sidebar"
-          >
-            <History size={15} />
-          </button>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
+              className="bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-300 text-xs px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm focus:outline-none focus:border-blue-500 cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-zinc-850"
+            >
+              <option value="gemini">♊ Gemini 3.8 / Pro</option>
+              <option value="kimi-k3">👑 Kimi-K3 (Super Reasoning)</option>
+            </select>
+
+            <button
+              onClick={createNewSession}
+              className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-850 text-gray-700 dark:text-zinc-300 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer active:scale-95"
+              title="New Chat Session"
+            >
+              <Plus size={14} className="text-blue-500" />
+              <span className="hidden sm:inline">New Task</span>
+            </button>
+            
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`p-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-850 text-gray-700 dark:text-zinc-300 transition-all flex items-center gap-1.5 cursor-pointer ${
+                showHistory ? 'ring-2 ring-blue-500/50' : ''
+              }`}
+              title="Toggle History Sidebar"
+            >
+              <History size={15} />
+              {sessions.length > 0 && (
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1 rounded-full">
+                  {sessions.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         {taskStatus === 'idle' ? (
@@ -105,7 +122,7 @@ export const ManusMode: React.FC = () => {
         ) : (
           <ChatView
             prompt={prompt}
-            messages={[]}
+            messages={messages}
             steps={steps}
             result={result}
             chartData={chartData}

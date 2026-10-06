@@ -1,5 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Square, Loader2, Volume2, Activity, Plus, Trash2, MessageSquare, Phone, PhoneOff, Calendar, Clock, Lock, Shield, Info, Settings, Check, AlertTriangle, Monitor } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { 
+  Mic, MicOff, Square, Loader2, Volume2, Activity, Plus, Trash2, 
+  MessageSquare, Phone, PhoneOff, Calendar, Clock, Lock, Shield, 
+  Info, Settings, Check, AlertTriangle, Monitor, Search, Play, Pause, 
+  Download, Copy, RefreshCw, Edit2, Radio, Sparkles, ChevronRight, CheckCircle2, History
+} from 'lucide-react';
 import { getAiInstance } from '../services/gemini';
 import { LiveServerMessage, Modality } from '@google/genai';
 import { useTheme } from '../contexts/ThemeContext';
@@ -8,7 +13,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth, saveVoiceCommandToCloud, saveVoiceSessionToCloud, deleteVoiceSessionFromCloud, syncVoiceSessions } from '../lib/firebase';
 import { ScreenStreamModal } from '../components/ScreenStreamModal';
 
-interface VoiceSession {
+export interface VoiceSession {
   id: string;
   title: string;
   updatedAt: Date;
@@ -20,11 +25,11 @@ interface VoiceSession {
   model?: string;
   hasRecording?: boolean;
   audioMimeType?: string;
-  type?: 'voice';
-  history?: VoiceHistoryItem[];
+  type?: 'voice' | 'voice-live' | 'voice-call';
+  messages?: VoiceHistoryItem[];
 }
 
-interface VoiceHistoryItem {
+export interface VoiceHistoryItem {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
@@ -54,7 +59,12 @@ export const VoiceMode: React.FC = () => {
         const parsed = JSON.parse(saved);
         return parsed.map((s: any) => ({
           ...s,
-          updatedAt: new Date(s.updatedAt)
+          type: s.type || 'voice',
+          updatedAt: new Date(s.updatedAt),
+          messages: Array.isArray(s.messages) ? s.messages.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          })) : []
         }));
       } catch (e) {
         return [];
@@ -67,7 +77,21 @@ export const VoiceMode: React.FC = () => {
     return localStorage.getItem('omnichat_voice_current') || null;
   });
 
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitleText, setEditingTitleText] = useState('');
+  const [copiedTranscript, setCopiedTranscript] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [activeViewTab, setActiveViewTab] = useState<'chat' | 'hud'>('chat');
+
+  // Audio Playback State for Recorded Sessions
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [audioPlaybackError, setAudioPlaybackError] = useState<string | null>(null);
+  const audioElemRef = useRef<HTMLAudioElement | null>(null);
+
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +120,6 @@ export const VoiceMode: React.FC = () => {
   const [showDrawer, setShowDrawer] = useState(true);
   const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   const [interactionHistory, setInteractionHistory] = useState<VoiceHistoryItem[]>([]);
-  const interactionHistoryRef = useRef<VoiceHistoryItem[]>([]);
-
-  useEffect(() => {
-    interactionHistoryRef.current = interactionHistory;
-  }, [interactionHistory]);
 
   useEffect(() => {
     isConnectedRef.current = isConnected;
@@ -118,8 +137,68 @@ export const VoiceMode: React.FC = () => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
 
+  // Track which session ID's messages are currently loaded in memory
+  const loadedSessionIdRef = useRef<string | null>(null);
+
+  // Load session messages into interactionHistory when switching sessions
   useEffect(() => {
-    if (interactionHistory.length === 0) return;
+    if (!currentSessionId) {
+      setInteractionHistory([]);
+      loadedSessionIdRef.current = null;
+      return;
+    }
+    
+    // Only load if switching to a different session and not connected
+    if (!isConnected && !isConnecting && loadedSessionIdRef.current !== currentSessionId) {
+      loadedSessionIdRef.current = currentSessionId;
+      const current = sessions.find(s => s.id === currentSessionId);
+      if (current) {
+        if (current.messages && current.messages.length > 0) {
+          setInteractionHistory(current.messages.map(m => ({
+            ...m,
+            timestamp: m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)
+          })));
+        } else if (current.transcript) {
+          // Reconstruct message bubbles from transcript text
+          const parsedLines = current.transcript.split('\n\n').filter(Boolean);
+          const reconstructed: VoiceHistoryItem[] = parsedLines.map((line, idx) => {
+            const isUser = line.startsWith('User:');
+            const text = line.replace(/^(User|Assistant):\s*/, '');
+            return {
+              id: `hist-${current.id}-${idx}`,
+              sender: isUser ? 'user' : 'assistant',
+              text: text,
+              timestamp: current.updatedAt instanceof Date ? current.updatedAt : new Date(current.updatedAt)
+            };
+          });
+          setInteractionHistory(reconstructed);
+        } else {
+          setInteractionHistory([]);
+        }
+      }
+    }
+  }, [currentSessionId, sessions, isConnected, isConnecting]);
+
+  // Persist interactionHistory to active session in sessions state and localStorage
+  useEffect(() => {
+    if (interactionHistory.length === 0 || !currentSessionId) return;
+
+    // Keep session state synced with full voice chat history
+    setSessions(prev => prev.map(s => {
+      if (s.id === currentSessionId) {
+        const fullTranscript = interactionHistory
+          .map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`)
+          .join('\n\n');
+        return {
+          ...s,
+          type: 'voice',
+          messages: interactionHistory,
+          transcript: fullTranscript,
+          updatedAt: new Date()
+        };
+      }
+      return s;
+    }));
     
     try {
       const raw = localStorage.getItem('omnichat_voice_commands');
@@ -163,6 +242,76 @@ export const VoiceMode: React.FC = () => {
       console.error('Failed to save voice commands from VoiceMode:', e);
     }
   }, [interactionHistory, currentSessionId]);
+
+  // Audio Playback Handler for recorded sessions
+  const handlePlayRecording = async (sessionId: string) => {
+    if (playingAudioId === sessionId && audioBlobUrl) {
+      if (audioElemRef.current) {
+        if (audioElemRef.current.paused) {
+          audioElemRef.current.play();
+        } else {
+          audioElemRef.current.pause();
+        }
+      }
+      return;
+    }
+
+    try {
+      setIsLoadingAudio(true);
+      setAudioPlaybackError(null);
+      const { getRecordingFromIDB, decryptAudioBlob } = await import('../utils/audioDB');
+      const recData = await getRecordingFromIDB(sessionId);
+      if (!recData) {
+        setAudioPlaybackError('No encrypted audio recording found in local storage.');
+        setIsLoadingAudio(false);
+        return;
+      }
+      const sess = sessions.find(s => s.id === sessionId);
+      const mime = sess?.audioMimeType || 'audio/webm';
+      const decryptedBlob = await decryptAudioBlob(recData.encryptedBuffer, recData.iv, mime);
+      const url = URL.createObjectURL(decryptedBlob);
+      if (audioBlobUrl) {
+        URL.revokeObjectURL(audioBlobUrl);
+      }
+      setAudioBlobUrl(url);
+      setPlayingAudioId(sessionId);
+      setIsLoadingAudio(false);
+    } catch (err: any) {
+      console.error('Failed to load/decrypt recording:', err);
+      setAudioPlaybackError('Failed to decrypt audio recording.');
+      setIsLoadingAudio(false);
+    }
+  };
+
+  const handleCopyTranscript = (transcriptText?: string) => {
+    const textToCopy = transcriptText || interactionHistory.map(m => `${m.sender === 'user' ? 'You' : 'Gemini'}: ${m.text}`).join('\n\n');
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedTranscript(true);
+    setTimeout(() => setCopiedTranscript(false), 2000);
+  };
+
+  const handleCopyMessage = (msgId: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(msgId);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  const handleRenameSession = (id: string, newTitle: string) => {
+    if (!newTitle.trim()) return;
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle.trim(), updatedAt: new Date() } : s));
+    setEditingSessionId(null);
+  };
+
+  // Filtered voice sessions for search in Voice History panel
+  const filteredSessions = useMemo(() => {
+    if (!historySearchQuery.trim()) return sessions;
+    const q = historySearchQuery.toLowerCase();
+    return sessions.filter(s => 
+      s.title.toLowerCase().includes(q) || 
+      (s.transcript && s.transcript.toLowerCase().includes(q))
+    );
+  }, [sessions, historySearchQuery]);
 
   const startVisualizer = () => {
     if (animationFrameRef.current) {
@@ -391,18 +540,6 @@ export const VoiceMode: React.FC = () => {
   }, [sessions, currentSessionId]);
 
   useEffect(() => {
-    if (!isConnected && !isConnecting && currentSessionId) {
-      const savedSession = sessions.find(s => s.id === currentSessionId);
-      if (savedSession?.history) {
-        setInteractionHistory(savedSession.history.map(item => ({
-          ...item,
-          timestamp: new Date(item.timestamp)
-        })));
-      }
-    }
-  }, [currentSessionId]);
-
-  useEffect(() => {
     localStorage.setItem('omnichat_voice_sessions', JSON.stringify(sessions));
     if (auth.currentUser) {
       syncVoiceSessions(sessions).then(merged => {
@@ -435,7 +572,7 @@ export const VoiceMode: React.FC = () => {
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
   const createNewSession = () => {
-    if (currentSession && currentSession.status === 'Disconnected' && currentSession.duration === '--') {
+    if (currentSession && currentSession.status === 'Disconnected' && currentSession.duration === '--' && (!currentSession.messages || currentSession.messages.length === 0)) {
       // Already an empty default session exists
       return;
     }
@@ -444,11 +581,14 @@ export const VoiceMode: React.FC = () => {
       title: `Voice Call #${sessions.length + 1}`,
       updatedAt: new Date(),
       status: 'Disconnected',
-      duration: '--'
+      duration: '--',
+      type: 'voice',
+      messages: []
     };
     setSessions(prev => [newSession, ...prev]);
-    setInteractionHistory([]);
     setCurrentSessionId(newSession.id);
+    setInteractionHistory([]);
+    loadedSessionIdRef.current = newSession.id;
   };
 
   const deleteSession = async (id: string, e: React.MouseEvent) => {
@@ -646,19 +786,14 @@ export const VoiceMode: React.FC = () => {
         .map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`)
         .join('\n\n');
 
-      const savedHistory = interactionHistoryRef.current.map(item => ({
-        ...item,
-        timestamp: item.timestamp instanceof Date ? item.timestamp : new Date(item.timestamp)
-      }));
-
       const updatedSess = { 
-        status: 'Completed' as const,
-        type: 'voice' as const,
-        history: savedHistory, 
+        status: 'Completed' as const, 
         duration: formatted,
         durationSecs: Math.floor(durationMs / 1000),
         audioPath: `/storage/emulated/0/AI/history/session_${currentSessionId}.m4a`,
         transcript: fullTranscript || 'No speech transcription captured.',
+        type: 'voice' as const,
+        messages: interactionHistory,
         model: 'Gemini 3.1 Flash Live',
         hasRecording: shouldRecord,
         audioMimeType: mediaRecorderRef.current?.mimeType || 'audio/webm'
@@ -898,75 +1033,197 @@ export const VoiceMode: React.FC = () => {
   return (
     <div className={`flex h-full w-full relative overflow-hidden ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
       
-      {/* History Collapsible Sidebar (Left) */}
+      {/* Voice History Collapsible Sidebar (Left) */}
       <AnimatePresence initial={false}>
         {showHistory && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 260, opacity: 1 }}
+            animate={{ width: 300, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
             style={{ willChange: 'width, opacity' }}
             className={`flex flex-col h-full border-r shrink-0 relative z-10 overflow-hidden ${
-              isDarkMode ? 'border-white/10 bg-black/30' : 'border-slate-200 bg-slate-50'
+              isDarkMode ? 'border-white/10 bg-black/40' : 'border-slate-200 bg-slate-50'
             }`}
           >
-            <div style={{ width: 260 }} className="flex flex-col h-full p-4">
-              <div className="flex items-center justify-between mb-4 shrink-0">
-                <span className={`text-[10px] font-bold uppercase tracking-wider opacity-60 ${isDarkMode ? 'text-white' : 'text-slate-700'}`}>Call Logs</span>
+            <div style={{ width: 300 }} className="flex flex-col h-full p-3.5">
+              {/* Header with Title and New Call button */}
+              <div className="flex items-center justify-between mb-3 shrink-0 pb-2 border-b dark:border-white/10 border-slate-200">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                    <Mic size={15} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider">Voice History</h3>
+                    <span className="text-[10px] opacity-60">Voice Type • Live Calls</span>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={createNewSession}
                   disabled={isConnected || isConnecting}
                   title="New Voice Call"
-                  className={`p-1.5 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-xs flex items-center gap-1 ${getAccentClass()} disabled:opacity-50`}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-all ${
+                    isDarkMode 
+                      ? 'bg-blue-600 hover:bg-blue-500 text-white' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  } disabled:opacity-50`}
                 >
-                  <Plus size={14} /> <span className="text-[10px] font-semibold">New</span>
+                  <Plus size={14} /> <span>New Call</span>
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 hide-scrollbar">
-                {sessions.map(s => (
-                  <div
-                    key={s.id}
-                    onClick={() => {
-                      if (!isConnected && !isConnecting) {
-                        setCurrentSessionId(s.id);
-                        setInteractionHistory((s.history || []).map((item: any) => ({
-                          ...item,
-                          timestamp: new Date(item.timestamp)
-                        })));
-                      }
-                    }}
-                    className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
-                      currentSessionId === s.id
-                        ? (isDarkMode ? 'bg-white/10 border-white/20 text-white shadow-md' : 'bg-slate-200 border-slate-300 text-slate-900 shadow-sm')
-                        : (isDarkMode ? 'hover:bg-white/5 border-transparent text-white/60 hover:text-white' : 'hover:bg-slate-100 border-transparent text-slate-600 hover:text-slate-900')
-                    } ${(isConnected || isConnecting) ? 'pointer-events-none opacity-80' : ''}`}
+
+              {/* Search Voice Sessions Input */}
+              <div className="relative mb-2.5 shrink-0">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-40" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder="Search voice transcripts..."
+                  className={`w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border transition-all outline-none ${
+                    isDarkMode 
+                      ? 'bg-white/5 border-white/10 text-white placeholder-white/30 focus:border-blue-500' 
+                      : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-blue-500'
+                  }`}
+                />
+                {historySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs opacity-50 hover:opacity-100"
                   >
-                    <div className="flex items-center gap-2.5 overflow-hidden flex-1 min-w-0">
-                      <Phone size={14} className={`shrink-0 ${
-                        s.status === 'Connected' ? 'text-emerald-500 animate-pulse' : 'text-cyan-500'
-                      }`} />
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-xs truncate font-medium">{s.title}</span>
-                          <span className="text-[8px] uppercase tracking-wider font-bold text-cyan-400/80 shrink-0">Voice</span>
-                        </div>
-                        <span className="text-[9px] opacity-45 truncate">
-                          {s.history?.length ? `${s.history.length} messages • ${s.duration !== '--' ? s.duration : 'Saved'}` : (s.duration !== '--' ? `Duration: ${s.duration}` : 'Not connected')}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => deleteSession(s.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500 transition-all ml-1 shrink-0"
-                      title="Delete Call"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Sessions Counter and Tag */}
+              <div className="flex items-center justify-between px-1 mb-2 shrink-0 text-[10px] opacity-60 font-medium">
+                <span>{filteredSessions.length} voice {filteredSessions.length === 1 ? 'call' : 'calls'} saved</span>
+                <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono text-[9px]">Voice Type</span>
+              </div>
+
+              {/* Voice Sessions List */}
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 hide-scrollbar">
+                {filteredSessions.length === 0 ? (
+                  <div className="h-40 flex flex-col items-center justify-center text-center p-4 opacity-50">
+                    <Mic size={24} className="mb-2 opacity-30 text-rose-400" />
+                    <p className="text-xs font-medium">No voice conversations found</p>
+                    <p className="text-[10px] opacity-60 mt-0.5">Start speaking with Gemini to create voice chat history.</p>
                   </div>
-                ))}
+                ) : (
+                  filteredSessions.map(s => {
+                    const isSelected = currentSessionId === s.id;
+                    const turnCount = s.messages?.length || (s.transcript ? s.transcript.split('\n\n').length : 0);
+                    const lastMsg = s.messages && s.messages.length > 0 
+                      ? s.messages[s.messages.length - 1].text 
+                      : (s.transcript ? s.transcript.slice(-90) : '');
+
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          if (!isConnected && !isConnecting) {
+                            setCurrentSessionId(s.id);
+                          }
+                        }}
+                        className={`group relative flex flex-col p-2.5 rounded-xl cursor-pointer transition-all border ${
+                          isSelected
+                            ? (isDarkMode 
+                                ? 'bg-white/10 border-blue-500/50 text-white shadow-md' 
+                                : 'bg-blue-50/80 border-blue-300 text-slate-900 shadow-sm')
+                            : (isDarkMode 
+                                ? 'hover:bg-white/5 border-transparent text-white/70 hover:text-white' 
+                                : 'hover:bg-slate-100 border-transparent text-slate-700 hover:text-slate-900')
+                        } ${(isConnected || isConnecting) && !isSelected ? 'opacity-60 pointer-events-none' : ''}`}
+                      >
+                        {/* Top Line: Icon, Title, Voice badge & Delete */}
+                        <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                          <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                            {s.status === 'Connected' ? (
+                              <Phone size={13} className="shrink-0 text-emerald-400 animate-pulse" />
+                            ) : (
+                              <Mic size={13} className="shrink-0 text-rose-400" />
+                            )}
+                            
+                            {editingSessionId === s.id ? (
+                              <input
+                                type="text"
+                                value={editingTitleText}
+                                onChange={(e) => setEditingTitleText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRenameSession(s.id, editingTitleText);
+                                  if (e.key === 'Escape') setEditingSessionId(null);
+                                }}
+                                onBlur={() => handleRenameSession(s.id, editingTitleText)}
+                                autoFocus
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs px-1.5 py-0.5 rounded bg-black/40 border border-blue-400 text-white outline-none w-full"
+                              />
+                            ) : (
+                              <span className="text-xs truncate font-semibold">{s.title}</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                              Voice
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSessionId(s.id);
+                                setEditingTitleText(s.title);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                              title="Rename Call"
+                            >
+                              <Edit2 size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => deleteSession(s.id, e)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500 transition-all"
+                              title="Delete Call"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Metrics: Duration, Turn count, Audio Recorded indicator */}
+                        <div className="flex items-center justify-between text-[10px] opacity-60 mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1">
+                              <Clock size={10} />
+                              {s.duration !== '--' ? s.duration : '0s'}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <MessageSquare size={10} />
+                              {turnCount} {turnCount === 1 ? 'turn' : 'turns'}
+                            </span>
+                          </div>
+
+                          {s.hasRecording && (
+                            <span className="flex items-center gap-0.5 text-emerald-400 font-medium">
+                              <Shield size={10} /> Audio
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Bottom line: Snippet preview */}
+                        {lastMsg && (
+                          <p className="text-[10px] opacity-50 truncate font-mono text-left">
+                            {lastMsg}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </motion.div>
@@ -976,234 +1233,494 @@ export const VoiceMode: React.FC = () => {
       {/* Main Panel (Center) */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         
-        {/* Header Tabs with Toggle Button */}
-        <div className={`p-4 border-b flex items-center justify-between shrink-0 ${
-          isDarkMode ? 'bg-slate-900/50 border-white/10' : 'bg-white border-slate-200'
+        {/* Header Bar with Session Controls & Mode Switches */}
+        <div className={`p-3.5 border-b flex items-center justify-between shrink-0 gap-3 ${
+          isDarkMode ? 'bg-slate-900/60 border-white/10' : 'bg-white border-slate-200'
         }`}>
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold">Live Voice Conversation</span>
+          {/* Left: Session Title, Voice Type Badge, Status */}
+          <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
+            <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20 shrink-0">
+              <Mic size={16} />
+            </div>
+            
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold truncate">
+                  {currentSession?.title || 'Live Voice Conversation'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/20 shrink-0">
+                  Voice Type
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2 text-[10px] opacity-60">
+                <span>Gemini 3.1 Flash Live</span>
+                {currentSession?.duration && currentSession.duration !== '--' && (
+                  <>
+                    <span>•</span>
+                    <span>Duration: {currentSession.duration}</span>
+                  </>
+                )}
+                <span>•</span>
+                <span className={isConnected ? "text-emerald-400 font-semibold flex items-center gap-1" : ""}>
+                  {isConnected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />}
+                  {status}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right: Controls & Toggles */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Call / Disconnect Quick Button */}
+            {isConnected ? (
+              <button
+                type="button"
+                onClick={disconnect}
+                className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-red-600/20 transition-all"
+              >
+                <PhoneOff size={14} /> <span>End Call</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={connect}
+                disabled={isConnecting || !currentSessionId}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+              >
+                <Phone size={14} /> <span>Start Voice Call</span>
+              </button>
+            )}
+
+            {/* Switch between Voice Chat History & Visualizer when disconnected and messages exist */}
+            {!isConnected && interactionHistory.length > 0 && (
+              <div className={`flex items-center p-0.5 rounded-lg border ${isDarkMode ? 'bg-black/30 border-white/10' : 'bg-slate-100 border-slate-200'}`}>
+                <button
+                  type="button"
+                  onClick={() => setActiveViewTab('chat')}
+                  className={`px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
+                    activeViewTab === 'chat'
+                      ? (isDarkMode ? 'bg-white/15 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm')
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="View Voice Chat History"
+                >
+                  <MessageSquare size={13} /> <span>History</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveViewTab('hud')}
+                  className={`px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
+                    activeViewTab === 'hud'
+                      ? (isDarkMode ? 'bg-white/15 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm')
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="View Call HUD & Waveform Visualizer"
+                >
+                  <Activity size={13} /> <span>HUD</span>
+                </button>
+              </div>
+            )}
+
+            {/* Copy Voice Transcript */}
+            {interactionHistory.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleCopyTranscript()}
+                title="Copy Full Voice Transcript"
+                className={`p-1.5 rounded-lg border transition-all ${
+                  copiedTranscript 
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' 
+                    : (isDarkMode ? 'border-white/10 hover:bg-white/10 text-white/70' : 'border-slate-200 hover:bg-slate-100 text-slate-600')
+                }`}
+              >
+                {copiedTranscript ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            )}
+
+            {/* Live Transcript Drawer Toggle (only during call) */}
             {isConnected && (
               <button
                 type="button"
                 onClick={() => setShowDrawer(!showDrawer)}
-                title="Toggle Live Transcript"
-                className={`p-1.5 rounded-md transition-colors ${
+                title="Toggle Live Transcript Drawer"
+                className={`p-1.5 rounded-lg transition-colors border ${
                   showDrawer 
-                    ? `bg-black/10 dark:bg-white/10 ${getAccentClass()}` 
-                    : (isDarkMode ? 'text-white/60 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-200')
+                    ? `bg-black/10 dark:bg-white/10 border-blue-500/30 ${getAccentClass()}` 
+                    : (isDarkMode ? 'border-white/10 text-white/60 hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:bg-slate-200')
                 }`}
               >
-                <Activity size={18} />
+                <Activity size={16} />
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={createNewSession}
-              disabled={isConnected || isConnecting}
-              title="New Voice Call"
-              className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-900'} disabled:opacity-50`}
-            >
-              <Plus size={18} />
-            </button>
-
+            {/* Toggle Voice History Sidebar Button */}
             <button
               type="button"
               onClick={() => setShowHistory(!showHistory)}
-              title="Toggle History"
-              className={`p-1.5 rounded-md transition-colors ${
+              title="Toggle Voice History Panel"
+              className={`p-1.5 rounded-lg border transition-all ${
                 showHistory 
-                  ? `bg-black/10 dark:bg-white/10 ${getAccentClass()}` 
-                  : (isDarkMode ? 'text-white/60 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-200')
+                  ? `bg-rose-500/10 border-rose-500/30 text-rose-400` 
+                  : (isDarkMode ? 'border-white/10 text-white/60 hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:bg-slate-200')
               }`}
             >
-              <MessageSquare size={18} />
+              <History size={16} />
             </button>
           </div>
         </div>
- 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-center">
-          <div className={`max-w-2xl w-full rounded-2xl shadow-sm border p-6 md:p-8 flex flex-col items-center ${
-            isDarkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'
+
+        {/* Audio Recording Player Bar (if current session has encrypted audio in IndexedDB) */}
+        {currentSession?.hasRecording && (
+          <div className={`px-4 py-2.5 border-b flex items-center justify-between shrink-0 text-xs gap-3 ${
+            isDarkMode ? 'bg-blue-950/20 border-blue-500/20 text-blue-200' : 'bg-blue-50 border-blue-200 text-blue-800'
           }`}>
-            
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-colors ${
-              isConnected 
-                ? (isMuted ? 'bg-amber-950/40 text-amber-500' : (isDarkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-100 text-emerald-500')) 
-                : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-400')
-            }`}>
-              {isConnected ? (
-                isMuted ? <MicOff size={40} className="animate-pulse" /> : <Activity size={40} className="animate-pulse" />
-              ) : (
-                <Volume2 size={40} />
-              )}
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => handlePlayRecording(currentSession.id)}
+                disabled={isLoadingAudio}
+                className="p-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-sm shrink-0 transition-all flex items-center justify-center disabled:opacity-50"
+                title={playingAudioId === currentSession.id ? "Pause Audio" : "Play Recorded Voice Audio"}
+              >
+                {isLoadingAudio ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : playingAudioId === currentSession.id ? (
+                  <Pause size={13} />
+                ) : (
+                  <Play size={13} className="ml-0.5" />
+                )}
+              </button>
+              
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-xs flex items-center gap-1.5">
+                  <Shield size={12} className="text-emerald-400" />
+                  Dual-Track Encrypted Voice Recording
+                </span>
+                <span className="text-[10px] opacity-70">
+                  Stereo recording (Mic & Gemini audio) stored in local secure vault
+                </span>
+              </div>
             </div>
-            
-            <h2 className="text-2xl font-bold mb-2">Live Voice Conversation</h2>
-            <p className="opacity-60 text-sm text-center mb-6 max-w-md">
-              Have a real-time, low-latency voice conversation with Gemini using the Live API.
-            </p>
+
+            {audioBlobUrl && playingAudioId === currentSession.id && (
+              <div className="flex items-center gap-3 shrink-0">
+                <audio 
+                  ref={audioElemRef}
+                  src={audioBlobUrl} 
+                  controls 
+                  autoPlay
+                  className="h-7 max-w-[200px] sm:max-w-[280px]"
+                />
+                <a
+                  href={audioBlobUrl}
+                  download={`voice_call_${currentSession.id}.webm`}
+                  className="p-1.5 rounded-lg border border-blue-400/30 hover:bg-blue-500/20 text-blue-400 text-xs flex items-center gap-1 font-semibold"
+                  title="Download Recording"
+                >
+                  <Download size={13} />
+                </a>
+              </div>
+            )}
+
+            {audioPlaybackError && (
+              <span className="text-red-400 text-[10px] font-semibold">{audioPlaybackError}</span>
+            )}
+          </div>
+        )}
  
-            {currentSession && (
-              <div className={`w-full mb-6 rounded-xl p-4 border flex flex-col gap-3 text-xs ${
-                isDarkMode ? 'bg-black/20 border-white/5 text-white/70' : 'bg-slate-50 border-slate-200 text-slate-600'
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col items-center">
+          
+          {/* CASE A: Voice Chat History Conversation View */}
+          {!isConnected && activeViewTab === 'chat' && interactionHistory.length > 0 ? (
+            <div className="w-full max-w-3xl flex flex-col h-full">
+              {/* Header Info Banner */}
+              <div className={`p-3 rounded-xl border mb-4 flex items-center justify-between text-xs shrink-0 ${
+                isDarkMode ? 'bg-black/20 border-white/5 text-white/70' : 'bg-slate-100 border-slate-200 text-slate-600'
               }`}>
-                <div className="flex justify-around items-center">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar size={13} className="opacity-60" />
-                    <span>Call: {currentSession.title}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-rose-400">Voice Chat History</span>
+                  <span>•</span>
+                  <span>{interactionHistory.length} speech {interactionHistory.length === 1 ? 'turn' : 'turns'} captured</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyTranscript()}
+                  className="text-[11px] text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                >
+                  <Copy size={11} /> {copiedTranscript ? 'Copied to clipboard' : 'Copy transcript'}
+                </button>
+              </div>
+
+              {/* Chat Message Turns List */}
+              <div className="flex-1 space-y-4 overflow-y-auto pr-1 pb-4">
+                {interactionHistory.map((item) => {
+                  const isUser = item.sender === 'user';
+                  const timeFormatted = item.timestamp instanceof Date 
+                    ? item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                    : new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
+                    >
+                      {/* Speaker Badge & Time */}
+                      <div className="flex items-center gap-2 mb-1 px-1 text-[10px] opacity-60">
+                        {isUser ? (
+                          <>
+                            <span>{timeFormatted}</span>
+                            <span>•</span>
+                            <span className="font-bold text-blue-400 flex items-center gap-1">
+                              <Mic size={11} /> You (Voice Input)
+                            </span>
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              Voice
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-bold text-violet-400 flex items-center gap-1">
+                              <Sparkles size={11} /> Gemini Voice (Response)
+                            </span>
+                            <span className="px-1 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                              Voice
+                            </span>
+                            <span>•</span>
+                            <span>{timeFormatted}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Message Bubble */}
+                      <div className="group relative max-w-[90%] sm:max-w-[80%]">
+                        <div className={`p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words shadow-sm ${
+                          isUser
+                            ? 'bg-blue-600 text-white rounded-tr-none'
+                            : (isDarkMode ? 'bg-white/10 text-slate-100 rounded-tl-none border border-white/5' : 'bg-white text-slate-800 rounded-tl-none border border-slate-200 shadow-sm')
+                        }`}>
+                          {item.text}
+                        </div>
+
+                        {/* Quick Copy Action */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyMessage(item.id, item.text)}
+                          className={`absolute ${isUser ? '-left-7' : '-right-7'} top-2 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-black/20 text-slate-400 hover:text-white transition-all`}
+                          title="Copy message"
+                        >
+                          {copiedMsgId === item.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Quick Call Resume Banner */}
+              <div className={`p-4 rounded-2xl border mt-2 flex items-center justify-between gap-4 shrink-0 ${
+                isDarkMode ? 'bg-slate-900/80 border-white/10' : 'bg-slate-50 border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <Mic size={18} />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock size={13} className="opacity-60" />
-                    <span>Duration: {currentSession.duration !== '--' ? currentSession.duration : 'Not Started'}</span>
+                  <div>
+                    <h4 className="text-xs font-bold">Continue Voice Conversation</h4>
+                    <p className="text-[10px] opacity-60">Hands-free low-latency speech conversation with Gemini Live</p>
                   </div>
                 </div>
-                
-                <div className="border-t border-slate-200/40 dark:border-white/5 pt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Shield size={13} className={recordSession ? "text-emerald-500 animate-pulse" : "text-amber-500"} />
-                    <span className="font-semibold">
-                      {recordSession ? "Encrypted Recording Enabled" : "Call Recording Disabled"}
-                    </span>
+
+                <button
+                  type="button"
+                  onClick={connect}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all shrink-0"
+                >
+                  <Phone size={14} /> <span>Resume Call</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* CASE B: Live Call HUD & Waveform Visualizer */
+            <div className={`max-w-2xl w-full rounded-2xl shadow-sm border p-6 md:p-8 flex flex-col items-center ${
+              isDarkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'
+            }`}>
+              
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-colors ${
+                isConnected 
+                  ? (isMuted ? 'bg-amber-950/40 text-amber-500' : (isDarkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-100 text-emerald-500')) 
+                  : (isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-400')
+              }`}>
+                {isConnected ? (
+                  isMuted ? <MicOff size={40} className="animate-pulse" /> : <Activity size={40} className="animate-pulse" />
+                ) : (
+                  <Volume2 size={40} />
+                )}
+              </div>
+              
+              <h2 className="text-2xl font-bold mb-2">Live Voice Conversation</h2>
+              <p className="opacity-60 text-sm text-center mb-6 max-w-md">
+                Have a real-time, low-latency voice conversation with Gemini using the Live API.
+              </p>
+   
+              {currentSession && (
+                <div className={`w-full mb-6 rounded-xl p-4 border flex flex-col gap-3 text-xs ${
+                  isDarkMode ? 'bg-black/20 border-white/5 text-white/70' : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="flex justify-around items-center">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar size={13} className="opacity-60" />
+                      <span>Call: {currentSession.title}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={13} className="opacity-60" />
+                      <span>Duration: {currentSession.duration !== '--' ? currentSession.duration : 'Not Started'}</span>
+                    </div>
                   </div>
-                  {!isConnected && (
+                  
+                  <div className="border-t border-slate-200/40 dark:border-white/5 pt-2 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Shield size={13} className={recordSession ? "text-emerald-500 animate-pulse" : "text-amber-500"} />
+                      <span className="font-semibold">
+                        {recordSession ? "Encrypted Recording Enabled" : "Call Recording Disabled"}
+                      </span>
+                    </div>
+                    {!isConnected && (
+                      <button
+                        type="button"
+                        onClick={() => setRecordSession(!recordSession)}
+                        className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                          recordSession
+                            ? 'bg-blue-600/10 border-blue-500/30 text-blue-500 hover:bg-blue-600/20'
+                            : 'bg-slate-500/10 border-slate-500/20 text-slate-400 hover:bg-slate-500/20'
+                        }`}
+                      >
+                        <Lock size={10} /> {recordSession ? "Turn Off" : "Turn On"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+   
+              {/* Real-time Web Audio API Waveform Visualizer */}
+              <div className={`w-full h-24 rounded-xl overflow-hidden border mb-4 relative ${
+                isDarkMode 
+                  ? 'bg-black/40 border-white/5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]' 
+                  : 'bg-slate-50/80 border-slate-200/60 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)]'
+              }`}>
+                <canvas ref={canvasRef} className="w-full h-full block" />
+                
+                <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider bg-black/60 text-white/80 font-mono">
+                  {isConnected ? (isMuted ? 'Muted' : 'Live') : 'Idle'}
+                </div>
+              </div>
+  
+              {/* Visual Input Volume Sensitivity Bar */}
+              <div className={`w-full mb-8 p-3 rounded-xl border ${
+                isDarkMode ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-150'
+              }`}>
+                <div className="flex items-center justify-between mb-1.5 text-[11px] font-medium opacity-70">
+                  <span className="flex items-center gap-1">
+                    <Mic size={11} /> Input Gain Sensitivity
+                  </span>
+                  <span id="volume-db-label" className="font-mono text-[10px]">
+                    {isConnected ? (isMuted ? 'Muted' : 'Detecting...') : 'Disconnected'}
+                  </span>
+                </div>
+                <div className={`w-full h-2 rounded-full overflow-hidden ${
+                  isDarkMode ? 'bg-white/10' : 'bg-slate-200'
+                }`}>
+                  <div 
+                    ref={volumeMeterRef} 
+                    className="h-full w-0 rounded-full transition-all duration-75 ease-out"
+                    style={{ backgroundColor: '#3b82f6' }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1 text-[9px] opacity-40 font-mono">
+                  <span>0%</span>
+                  <span>Optimal (20% - 70%)</span>
+                  <span>Peak</span>
+                </div>
+              </div>
+   
+              <div className="flex flex-col items-center gap-4 w-full">
+                <div className="flex items-center justify-center gap-6">
+                  {/* Mute/Pause Button (only when connected) */}
+                  {isConnected && (
                     <button
                       type="button"
-                      onClick={() => setRecordSession(!recordSession)}
-                      className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 border transition-all ${
-                        recordSession
-                          ? 'bg-blue-600/10 border-blue-500/30 text-blue-500 hover:bg-blue-600/20'
-                          : 'bg-slate-500/10 border-slate-500/20 text-slate-400 hover:bg-slate-500/20'
+                      onClick={() => setIsMuted(!isMuted)}
+                      title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                      className={`p-4 rounded-full border transition-all ${
+                        isMuted
+                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20'
+                          : 'bg-slate-500/10 border-slate-500/25 text-slate-400 hover:bg-slate-500/20'
                       }`}
                     >
-                      <Lock size={10} /> {recordSession ? "Turn Off" : "Turn On"}
+                      {isMuted ? <MicOff size={24} className="animate-pulse" /> : <Mic size={24} />}
+                    </button>
+                  )}
+  
+                  {/* Screen Capture Stream AI Vision Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsScreenStreamOpen(true)}
+                    title="Screen Capture & AI Vision Stream"
+                    className="p-4 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-all cursor-pointer"
+                  >
+                    <Monitor size={24} />
+                  </button>
+  
+                  {/* Main Action Button */}
+                  <button
+                    onClick={isConnected ? disconnect : connect}
+                    disabled={(isConnecting && !isConnected) || !currentSessionId}
+                    className={`w-28 h-28 rounded-full flex items-center justify-center transition-all ${
+                      isConnected 
+                        ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30' 
+                        : 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/30'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {isConnecting && !isConnected ? (
+                      <Loader2 size={36} className="text-white animate-spin" />
+                    ) : isConnected ? (
+                      <PhoneOff size={36} className="text-white" />
+                    ) : (
+                      <Phone size={36} className="text-white" />
+                    )}
+                  </button>
+  
+                  {/* Drawer/Transcript Toggle Button (only when connected) */}
+                  {isConnected && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDrawer(!showDrawer)}
+                      title={showDrawer ? "Hide Live Transcript" : "Show Live Transcript"}
+                      className={`p-4 rounded-full border transition-all ${
+                        showDrawer
+                          ? `${getAccentClass()} bg-slate-500/10`
+                          : 'bg-slate-500/10 border-slate-500/25 text-slate-400 hover:bg-slate-500/20'
+                      }`}
+                    >
+                      <MessageSquare size={24} />
                     </button>
                   )}
                 </div>
-              </div>
-            )}
- 
-            {/* Real-time Web Audio API Waveform Visualizer */}
-            <div className={`w-full h-24 rounded-xl overflow-hidden border mb-4 relative ${
-              isDarkMode 
-                ? 'bg-black/40 border-white/5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]' 
-                : 'bg-slate-50/80 border-slate-200/60 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)]'
-            }`}>
-              <canvas ref={canvasRef} className="w-full h-full block" />
-              
-              <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider bg-black/60 text-white/80 font-mono">
-                {isConnected ? (isMuted ? 'Muted' : 'Live') : 'Idle'}
-              </div>
-            </div>
-
-            {/* Visual Input Volume Sensitivity Bar */}
-            <div className={`w-full mb-8 p-3 rounded-xl border ${
-              isDarkMode ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-150'
-            }`}>
-              <div className="flex items-center justify-between mb-1.5 text-[11px] font-medium opacity-70">
-                <span className="flex items-center gap-1">
-                  <Mic size={11} /> Input Gain Sensitivity
-                </span>
-                <span id="volume-db-label" className="font-mono text-[10px]">
-                  {isConnected ? (isMuted ? 'Muted' : 'Detecting...') : 'Disconnected'}
-                </span>
-              </div>
-              <div className={`w-full h-2 rounded-full overflow-hidden ${
-                isDarkMode ? 'bg-white/10' : 'bg-slate-200'
-              }`}>
-                <div 
-                  ref={volumeMeterRef} 
-                  className="h-full w-0 rounded-full transition-all duration-75 ease-out"
-                  style={{ backgroundColor: '#3b82f6' }}
-                />
-              </div>
-              <div className="flex justify-between mt-1 text-[9px] opacity-40 font-mono">
-                <span>0%</span>
-                <span>Optimal (20% - 70%)</span>
-                <span>Peak</span>
-              </div>
-            </div>
- 
-            <div className="flex flex-col items-center gap-4 w-full">
-              <div className="flex items-center justify-center gap-6">
-                {/* Mute/Pause Button (only when connected) */}
-                {isConnected && (
-                  <button
-                    type="button"
-                    onClick={() => setIsMuted(!isMuted)}
-                    title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
-                    className={`p-4 rounded-full border transition-all ${
-                      isMuted
-                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20'
-                        : 'bg-slate-500/10 border-slate-500/25 text-slate-400 hover:bg-slate-500/20'
-                    }`}
-                  >
-                    {isMuted ? <MicOff size={24} className="animate-pulse" /> : <Mic size={24} />}
-                  </button>
-                )}
-
-                {/* Screen Capture Stream AI Vision Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsScreenStreamOpen(true)}
-                  title="Screen Capture & AI Vision Stream"
-                  className="p-4 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-all cursor-pointer"
-                >
-                  <Monitor size={24} />
-                </button>
-
-                {/* Main Action Button */}
-                <button
-                  onClick={isConnected ? disconnect : connect}
-                  disabled={(isConnecting && !isConnected) || !currentSessionId}
-                  className={`w-28 h-28 rounded-full flex items-center justify-center transition-all ${
-                    isConnected 
-                      ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30' 
-                      : 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/30'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {isConnecting && !isConnected ? (
-                    <Loader2 size={36} className="text-white animate-spin" />
-                  ) : isConnected ? (
-                    <PhoneOff size={36} className="text-white" />
-                  ) : (
-                    <Phone size={36} className="text-white" />
-                  )}
-                </button>
-
-                {/* Drawer/Transcript Toggle Button (only when connected) */}
-                {isConnected && (
-                  <button
-                    type="button"
-                    onClick={() => setShowDrawer(!showDrawer)}
-                    title={showDrawer ? "Hide Live Transcript" : "Show Live Transcript"}
-                    className={`p-4 rounded-full border transition-all ${
-                      showDrawer
-                        ? `${getAccentClass()} bg-slate-500/10`
-                        : 'bg-slate-500/10 border-slate-500/25 text-slate-400 hover:bg-slate-500/20'
-                    }`}
-                  >
-                    <MessageSquare size={24} />
-                  </button>
-                )}
-              </div>
-              
-              <div className="flex flex-col items-center mt-4">
-                <span className={`font-medium ${isConnected ? 'text-emerald-500 animate-pulse' : 'text-slate-500'}`}>
-                  {status}
-                </span>
-                {error && (
-                  <span className="text-red-500 text-sm mt-2 text-center max-w-md">
-                    {error}
+                
+                <div className="flex flex-col items-center mt-4">
+                  <span className={`font-medium ${isConnected ? 'text-emerald-500 animate-pulse' : 'text-slate-500'}`}>
+                    {status}
                   </span>
-                )}
+                  {error && (
+                    <span className="text-red-500 text-sm mt-2 text-center max-w-md">
+                      {error}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

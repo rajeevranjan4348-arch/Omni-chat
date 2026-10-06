@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { getAiInstance, transcribeAudio } from '../services/gemini';
-import { buildAndroidSystemInstruction } from '../services/androidSystemPrompt';
-import { androidDeviceBridge, ANDROID_DEVICE_TOOL_DECLARATIONS, executeAndroidTool } from '../services/androidDeviceBridge';
 import { useSettings } from '../contexts/SettingsContext';
 import { Send, Mic, Square, Loader2, Bot, User, Trash2, RotateCcw, Copy, Check, Sparkles, MessageSquare, Plus, X, FileText, Archive, Download, Paperclip, Video, Briefcase, Pin, PinOff, ScanEye, HelpCircle } from 'lucide-react';
 import { Attachment } from '../types';
@@ -480,20 +478,13 @@ export const OmniChatMode: React.FC = () => {
   const initChat = useCallback((currentMessages: Msg[] = messages) => {
     if (!apiKey) return;
     const ai = getAiInstance();
-    let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure. You have real-time web data access through Google Search. For questions about current, latest, today's, recent, live, changing, or time-sensitive information, use the Google Search tool before answering. Clearly distinguish live/current facts from general knowledge and never pretend stale knowledge is current.`;
+    let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure.`;
     if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
     if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
     const history = currentMessages.filter(m => !m.streaming && m.text).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
-    const finalSystemInstruction = buildAndroidSystemInstruction(sys);
-    const androidTools = androidDeviceBridge.isConfigured()
-      ? [{ functionDeclarations: ANDROID_DEVICE_TOOL_DECLARATIONS }]
-      : [];
     chatRef.current = ai.chats.create({
       model: 'gemini-3.5-flash',
-      config: {
-        systemInstruction: { parts: [{ text: finalSystemInstruction }] },
-        tools: [{ googleSearch: {} }, ...androidTools],
-      },
+      config: { systemInstruction: { parts: [{ text: sys }] } },
       history: history.length ? history : undefined,
     });
   }, [messages, userProfile, apiKey]);
@@ -592,59 +583,11 @@ export const OmniChatMode: React.FC = () => {
         ];
       }
 
+      const stream = await chatRef.current.sendMessageStream({ message: messageContent });
       let full = '';
-      let groundingChunks: any[] = [];
-
-      // If the Android companion is connected, let Gemini drive a verified
-      // screen -> action -> screen loop. Without a bridge, preserve the normal
-      // streaming chat path and never pretend the phone was controlled.
-      if (androidDeviceBridge.isConfigured()) {
-        let response: any = await chatRef.current.sendMessage({ message: messageContent });
-        for (let step = 0; step < 12; step++) {
-          const calls = Array.isArray(response?.functionCalls) ? response.functionCalls : [];
-          if (!calls.length) {
-            full = response?.text || '';
-            break;
-          }
-
-          const functionResponses = [];
-          for (const call of calls) {
-            let result: unknown;
-            try {
-              result = await executeAndroidTool(call.name, call.args || {});
-            } catch (toolError: any) {
-              result = { ok: false, error: toolError?.message || 'Android bridge action failed.' };
-            }
-            functionResponses.push({
-              functionResponse: {
-                name: call.name,
-                id: call.id,
-                response: { result },
-              },
-            });
-          }
-
-          response = await chatRef.current.sendMessage({ message: functionResponses });
-          if (response?.text) {
-            full = response.text;
-            setMessages(prev => prev.map(m => m.id === modelId ? { ...m, text: full } : m));
-          }
-        }
+      for await (const chunk of stream) {
+        if (chunk.text) full += chunk.text;
         setMessages(prev => prev.map(m => m.id === modelId ? { ...m, text: full } : m));
-      } else {
-        const stream = await chatRef.current.sendMessageStream({ message: messageContent });
-        for await (const chunk of stream) {
-          if (chunk.text) full += chunk.text;
-          const chunkGrounding = (chunk as any).candidates?.[0]?.groundingMetadata?.groundingChunks;
-          if (Array.isArray(chunkGrounding)) {
-            groundingChunks = [...groundingChunks, ...chunkGrounding];
-          }
-          setMessages(prev => prev.map(m => m.id === modelId ? {
-            ...m,
-            text: full,
-            groundingChunks: groundingChunks.length ? groundingChunks : undefined
-          } : m));
-        }
       }
       sounds.playSuccess();
       triggerHaptic('success');

@@ -257,6 +257,12 @@ export function useManusAgent() {
     setPreviewUrl('');
     setSrcDoc('');
 
+    const activeSessionId = currentSessionId || `manus_${Date.now()}`;
+    if (!currentSessionId) {
+      setCurrentSessionId(activeSessionId);
+      localStorage.setItem('omnichat_manus_current_session_id', activeSessionId);
+    }
+
     const isWebsite = options.format === 'website';
     setTaskType(isWebsite ? 'website' : 'chat');
     if (isWebsite) {
@@ -355,7 +361,7 @@ export function useManusAgent() {
         );
       } else {
         const response = await ai.models.generateContent({
-          model: 'gemini-3.5-flash',
+          model: isWebsite ? 'gemini-3.1-pro-preview' : 'gemini-3.8-flash',
           contents: [
             { role: 'user', parts: [{ text: userMsg }] }
           ],
@@ -476,7 +482,7 @@ export function useManusAgent() {
     } finally {
       setIsLoading(false);
     }
-  }, [readAloud, ttsVoice]);
+  }, [readAloud, ttsVoice, selectedModel, currentSessionId]);
 
   const sendMessage = useCallback(async (content: string) => {
     setIsLoading(true);
@@ -522,10 +528,10 @@ export function useManusAgent() {
         );
       } else {
         const response = await ai.models.generateContent({
-          model: 'gemini-3.5-flash',
+          model: 'gemini-3.8-flash',
           contents: [
             { role: 'user', parts: [{ text: prompt }] },
-            { role: 'assistant', parts: [{ text: result?.content || '' }] },
+            { role: 'model', parts: [{ text: result?.content || '' }] },
             { role: 'user', parts: [{ text: content }] }
           ]
         });
@@ -560,6 +566,7 @@ export function useManusAgent() {
     previewUrl,
     srcDoc,
     isLoading,
+    messages,
     startTask,
     sendMessage,
     resetTask,

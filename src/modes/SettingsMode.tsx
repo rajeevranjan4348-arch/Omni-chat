@@ -28,7 +28,7 @@ export const SettingsMode: React.FC = () => {
   } = useSettings();
 
   // Navigation tab state inside Settings
-  const [activeTab, setActiveTab] = useState<'memory' | 'prompts' | 'appearance' | 'audio' | 'profile'>('memory');
+  const [activeTab, setActiveTab] = useState<'llm' | 'memory' | 'prompts' | 'appearance' | 'audio' | 'profile'>('llm');
 
   // Local state for new memory & new prompt preset
   const [newMemoryInput, setNewMemoryInput] = useState('');
@@ -169,8 +169,49 @@ export const SettingsMode: React.FC = () => {
           </div>
         )}
 
+        {/* Header */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Cpu size={24} className="text-cyan-400" />
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">AI & LLM Engine Settings</h1>
+            </div>
+            <p className={`text-sm ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>
+              Customize LLM hyperparameters, system instructions, AI memory bank, custom endpoints, and prompt templates.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportConfig}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold transition-all cursor-pointer"
+              title="Export AI Config JSON"
+            >
+              <Download size={14} />
+              <span>Export Config</span>
+            </button>
+            <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/30 text-xs font-semibold transition-all cursor-pointer">
+              <Upload size={14} />
+              <span>Import Config</span>
+              <input type="file" accept=".json" onChange={handleImportConfig} className="hidden" />
+            </label>
+          </div>
+        </header>
+
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-white/10 text-xs sm:text-sm font-semibold">
+          <button
+            onClick={() => setActiveTab('llm')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer shrink-0 ${
+              activeTab === 'llm'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Cpu size={16} />
+            <span>LLM Engine & Hyperparameters</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('memory')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer shrink-0 ${
@@ -231,6 +272,276 @@ export const SettingsMode: React.FC = () => {
             <span>User Persona</span>
           </button>
         </div>
+
+        {/* TAB 1: LLM ENGINE & HYPERPARAMETERS */}
+        {activeTab === 'llm' && (
+          <div className="space-y-8 animate-in fade-in-50 duration-200">
+            
+            {/* Primary Model Selection */}
+            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
+                    <Cpu size={20} className="text-cyan-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">Default AI Model Selection</h2>
+                    <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>Choose your primary model or persona preset</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {modelOptions.map((m) => {
+                  const isSelected = llmConfig.model === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setLlmConfig(prev => ({ ...prev, model: m.id }));
+                        triggerToast(`Switched LLM Model to ${m.name}`);
+                      }}
+                      className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between cursor-pointer ${
+                        isSelected 
+                          ? 'border-cyan-500 bg-cyan-500/10 shadow-lg shadow-cyan-500/10' 
+                          : `${getBorderClass()} hover:border-slate-500 ${isDarkMode ? 'bg-white/5' : 'bg-slate-50'}`
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="font-bold text-base flex items-center gap-2">
+                            {m.name}
+                            {isSelected && <Check size={16} className="text-cyan-400" />}
+                          </span>
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${m.badgeBg}`}>
+                            {m.tag}
+                          </span>
+                        </div>
+                        <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-white/60' : 'text-slate-600'}`}>
+                          {m.desc}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Hyperparameters Controls */}
+            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+                  <Sliders size={20} className="text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">LLM Hyperparameters</h2>
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>Fine-tune response creativity, output token budget, and probability bounds</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                {/* Temperature Slider */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-sm flex items-center gap-2">
+                      <Sparkles size={16} className="text-amber-400" />
+                      Temperature (Randomness)
+                    </label>
+                    <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-bold">
+                      {llmConfig.temperature} ({llmConfig.temperature < 0.3 ? 'Precise' : llmConfig.temperature < 0.8 ? 'Balanced' : 'Creative'})
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.0"
+                    max="1.0"
+                    step="0.05"
+                    value={llmConfig.temperature}
+                    onChange={(e) => setLlmConfig(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                    className="w-full h-2 rounded-lg bg-white/10 appearance-none cursor-pointer accent-amber-500"
+                  />
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                    Lower values produce factual & code-precise output. Higher values produce creative storytelling & brainstorming.
+                  </p>
+                </div>
+
+                {/* Top-P Slider */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-sm flex items-center gap-2">
+                      <Layers size={16} className="text-violet-400" />
+                      Top-P Nucleus Sampling
+                    </label>
+                    <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-300 font-bold">
+                      {llmConfig.topP}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.05"
+                    value={llmConfig.topP}
+                    onChange={(e) => setLlmConfig(prev => ({ ...prev, topP: parseFloat(e.target.value) }))}
+                    className="w-full h-2 rounded-lg bg-white/10 appearance-none cursor-pointer accent-violet-500"
+                  />
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                    Limits token selection probability mass. Recommended default is 0.95.
+                  </p>
+                </div>
+
+                {/* Max Tokens Budget */}
+                <div className="space-y-3 md:col-span-2">
+                  <label className="font-semibold text-sm flex items-center gap-2">
+                    <Terminal size={16} className="text-emerald-400" />
+                    Max Output Generation Budget
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[1024, 2048, 4096, 8192].map((token) => (
+                      <button
+                        key={token}
+                        onClick={() => setLlmConfig(prev => ({ ...prev, maxTokens: token }))}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          llmConfig.maxTokens === token
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-md shadow-emerald-500/20'
+                            : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {token} Tokens (~{Math.round(token * 0.75)} words)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Thinking / Reasoning Toggle */}
+                <div className="flex items-center justify-between p-4 rounded-xl border border-white/10 bg-white/5 md:col-span-2">
+                  <div>
+                    <h3 className="font-bold text-sm flex items-center gap-2">
+                      <Brain size={16} className="text-cyan-400" />
+                      Chain of Thought & Thinking Reasoning
+                    </h3>
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                      Display step-by-step logical reasoning before generating final responses
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setLlmConfig(prev => ({ ...prev, enableThinking: !prev.enableThinking }))}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      llmConfig.enableThinking ? 'bg-cyan-500' : isDarkMode ? 'bg-white/10' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        llmConfig.enableThinking ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+              </div>
+            </section>
+
+            {/* Custom System Prompt Override */}
+            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                    <FileText size={20} className="text-indigo-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">Global System Instruction Override</h2>
+                    <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>Injected as high-priority developer system instructions for all AI chats</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="text-slate-400 font-semibold self-center">Quick Templates:</span>
+                  <button
+                    onClick={() => setLlmConfig(prev => ({ ...prev, customSystemPrompt: 'You are a Senior Principal Software Engineer. Provide concise, production-ready code with minimal fluff and explain potential performance pitfalls.' }))}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/25 transition-all cursor-pointer"
+                  >
+                    Senior Software Architect
+                  </button>
+                  <button
+                    onClick={() => setLlmConfig(prev => ({ ...prev, customSystemPrompt: 'You are an elite Executive Assistant. Be extremely concise, use clear bullet points, bold key terms, and always provide actionable summaries.' }))}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 transition-all cursor-pointer"
+                  >
+                    Executive Assistant
+                  </button>
+                  <button
+                    onClick={() => setLlmConfig(prev => ({ ...prev, customSystemPrompt: 'You are a patient Socratic Professor. Teach concepts step-by-step, asking guiding questions that allow the user to discover the answers.' }))}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition-all cursor-pointer"
+                  >
+                    Socratic Professor
+                  </button>
+                  <button
+                    onClick={() => setLlmConfig(prev => ({ ...prev, customSystemPrompt: '' }))}
+                    className="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 transition-all cursor-pointer"
+                  >
+                    Clear Prompt
+                  </button>
+                </div>
+
+                <textarea
+                  value={llmConfig.customSystemPrompt}
+                  onChange={(e) => setLlmConfig(prev => ({ ...prev, customSystemPrompt: e.target.value }))}
+                  placeholder="e.g. Always respond in markdown format with code blocks. Prioritize clean, modern code examples and concise explanations."
+                  rows={4}
+                  className={`w-full p-3 rounded-xl border outline-none transition-colors font-mono text-xs ${
+                    isDarkMode 
+                      ? 'bg-black/40 border-white/10 focus:border-cyan-500/50 text-white' 
+                      : 'bg-slate-50 border-slate-200 focus:border-slate-400 text-slate-900'
+                  }`}
+                />
+              </div>
+            </section>
+
+            {/* Custom Provider / Endpoint Settings */}
+            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+                  <Globe size={20} className="text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Custom API Endpoint / Proxy</h2>
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>Optionally route through custom local Ollama, OpenRouter, or OpenAI-compatible proxies</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Custom Base API URL (Optional)</label>
+                  <input
+                    type="url"
+                    value={llmConfig.customEndpoint}
+                    onChange={(e) => setLlmConfig(prev => ({ ...prev, customEndpoint: e.target.value }))}
+                    placeholder="https://openrouter.ai/api/v1 or http://localhost:11434"
+                    className={`w-full p-2.5 rounded-xl border text-xs outline-none ${
+                      isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Custom API Key Override (Optional)</label>
+                  <input
+                    type="password"
+                    value={llmConfig.customApiKey}
+                    onChange={(e) => setLlmConfig(prev => ({ ...prev, customApiKey: e.target.value }))}
+                    placeholder="sk-or-v1-..."
+                    className={`w-full p-2.5 rounded-xl border text-xs outline-none ${
+                      isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+            </section>
+
+          </div>
+        )}
 
         {/* TAB 2: AI MEMORY BANK */}
         {activeTab === 'memory' && (

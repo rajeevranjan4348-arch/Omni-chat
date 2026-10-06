@@ -207,7 +207,7 @@ body.perf-boost {
   background-attachment: scroll !important;
 }
 
-/* 1. Disable/Reduce Expensive Blur Filters (disableHeavyBlur) */
+/* 1. Optimize Heavy Blur Filters without Layout Shifts */
 body.perf-boost .glass,
 body.perf-boost .glass-subtle,
 body.perf-boost .glass-strong,
@@ -219,145 +219,49 @@ body.perf-boost .backdrop-blur-3xl,
 body.perf-boost .backdrop-blur-md,
 body.perf-boost .backdrop-blur-sm,
 body.perf-boost .backdrop-blur {
-  backdrop-filter: blur(2px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(2px) saturate(130%) !important;
+  backdrop-filter: blur(10px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(140%) !important;
 }
 
-/* Disable expensive SVG/CSS blurs on weather particles to save paint overhead */
+/* Optimize weather particle rendering without layout shifts */
 body.perf-boost .weather-snowflake,
 body.perf-boost .weather-cloud-blob,
-body.perf-boost .weather-fog-blob,
-body.perf-boost [class*="blur-"] {
-  filter: none !important;
-  /* Retain standard opacity representation instead */
+body.perf-boost .weather-fog-blob {
+  will-change: transform;
 }
 
-/* 2. Enable Hardware Acceleration (FLAG_HARDWARE_ACCELERATED) */
+/* 2. Hardware Acceleration without Transform Overwrites (Zero Layout Shift) */
 body.perf-boost .weather-rain-drop,
 body.perf-boost .weather-drizzle-drop,
 body.perf-boost .weather-snowflake,
 body.perf-boost .weather-cloud-blob,
 body.perf-boost .weather-fog-blob,
-body.perf-boost .motion-div,
-body.perf-boost svg,
-body.perf-boost img,
+body.perf-boost .motion-div {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Safe hardware promotion for cards & animation containers without clobbering transforms */
 body.perf-boost .dash-card,
 body.perf-boost .animate-pulse {
-  transform: translate3d(0, 0, 0) !important;
-  will-change: transform, opacity !important;
-  backface-visibility: hidden !important;
-  -webkit-backface-visibility: hidden !important;
-  transform-style: preserve-3d !important;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  isolation: isolate;
 }
 
-/* 3. Smooth scrolling and optimized recyclerview equivalents */
+/* 3. Smooth scrolling and optimized compositor layers in high-load scenarios */
 body.perf-boost * {
-  scroll-behavior: smooth !important;
-  overscroll-behavior: contain;
+  scroll-behavior: auto !important; /* Prevents scroll stuttering during rapid redraws */
 }
 
-
-
-
-
-
-/* ===== Ultra Smooth Scrolling & Interaction ===== */
-html {
-  scroll-behavior: smooth;
-  overscroll-behavior-y: none;
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  overscroll-behavior-y: none;
+body.perf-boost .overflow-y-auto,
+body.perf-boost .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
-}
-
-#root {
-  min-height: 100%;
-  overscroll-behavior: contain;
-}
-
-[data-scroll-container],
-.scroll-smooth,
-.overflow-auto,
-.overflow-y-auto,
-.overflow-x-auto {
-  scroll-behavior: smooth;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-button,
-a,
-[role="button"] {
-  -webkit-tap-highlight-color: transparent;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html,
-  [data-scroll-container],
-  .scroll-smooth,
-  .overflow-auto,
-  .overflow-y-auto,
-  .overflow-x-auto,
-  body.perf-boost * {
-    scroll-behavior: auto !important;
-  }
+  overscroll-behavior-y: contain;
 }
 
 
-/* ===== Smooth Motion Layer =====
-   Adds lightweight compositor-friendly motion without changing layout, colors, or theme. */
-@keyframes omni-soft-enter {
-  from { opacity: 0; transform: translate3d(0, 8px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
-}
 
-@keyframes omni-soft-scale {
-  from { opacity: 0; transform: translate3d(0, 4px, 0) scale(0.985); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-}
 
-@keyframes omni-pulse-soft {
-  0%, 100% { opacity: 1; transform: translate3d(0, 0, 0); }
-  50% { opacity: 0.82; transform: translate3d(0, -1px, 0); }
-}
-
-.animate-omni-enter {
-  animation: omni-soft-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
-}
-
-.animate-omni-scale {
-  animation: omni-soft-scale 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
-}
-
-.animate-omni-pulse {
-  animation: omni-pulse-soft 2.2s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-
-.motion-safe {
-  transition:
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 220ms ease,
-    box-shadow 220ms ease;
-}
-
-.motion-safe:active {
-  transform: translate3d(0, 1px, 0) scale(0.99);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-omni-enter,
-  .animate-omni-scale,
-  .animate-omni-pulse {
-    animation: none !important;
-  }
-
-  .motion-safe {
-    transition: none !important;
-  }
-}

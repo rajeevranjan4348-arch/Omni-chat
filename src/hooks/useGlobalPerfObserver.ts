@@ -30,6 +30,7 @@ export function useGlobalPerfObserver(initialTargetFps: number = 90) {
     let lowFpsCount = 0;
     let highFpsCount = 0;
     let totalFrameTime = 0;
+    let lastBoostTime = 0;
     let animationFrameId: number;
 
     const checkPerformance = (now: number) => {
@@ -37,9 +38,18 @@ export function useGlobalPerfObserver(initialTargetFps: number = 90) {
       const frameDelta = now - (lastTime || now);
       totalFrameTime += frameDelta;
 
-      // Sample metrics every 400ms for fast feedback
+      // Sample metrics every 400ms for stable feedback
       if (now - lastTime >= 400) {
         const elapsed = now - lastTime;
+        if (elapsed > 1500) {
+          // Discard sample if gap is unusually large due to background tab sleep/freeze
+          frameCount = 0;
+          totalFrameTime = 0;
+          lastTime = now;
+          animationFrameId = requestAnimationFrame(checkPerformance);
+          return;
+        }
+
         const currentFps = Math.min(120, Math.round((frameCount * 1000) / elapsed));
         const avgFrameTime = totalFrameTime / frameCount;
 
@@ -47,32 +57,36 @@ export function useGlobalPerfObserver(initialTargetFps: number = 90) {
         totalFrameTime = 0;
         lastTime = now;
 
-        const lowFpsThreshold = Math.min(45, targetFpsRef.current * 0.55);
-        const highFpsThreshold = Math.min(115, targetFpsRef.current * 0.85);
+        const target = targetFpsRef.current || 90;
+        // Trigger hardware acceleration when frames drop below 78% of 90 FPS target (~70 FPS) or frame budget exceeded (>14.5ms)
+        const lowFpsThreshold = Math.round(target * 0.78);
+        const highFpsThreshold = Math.round(target * 0.90);
 
         let boostActive = document.body.classList.contains('perf-boost');
 
-        if (currentFps < lowFpsThreshold) {
+        if (currentFps < lowFpsThreshold || avgFrameTime > 14.5) {
           lowFpsCount++;
           highFpsCount = 0;
           if (lowFpsCount >= 2 && !boostActive) {
             document.body.classList.add('perf-boost');
             boostActive = true;
-            console.warn(`[90 FPS Engine] Frame drops detected (${currentFps} FPS). 'perf-boost' CSS active.`);
+            lastBoostTime = now;
+            console.warn(`[90 FPS Engine] Frame drops detected (${currentFps} FPS, ${avgFrameTime.toFixed(1)}ms). 'perf-boost' hardware acceleration active.`);
           }
-        } else if (currentFps >= highFpsThreshold) {
+        } else if (currentFps >= highFpsThreshold && avgFrameTime <= 12.0) {
           highFpsCount++;
           lowFpsCount = 0;
-          if (highFpsCount >= 5 && boostActive) {
+          // Apply minimum 2.5s cooldown to prevent frame stuttering and layer flapping
+          if (highFpsCount >= 5 && boostActive && (now - lastBoostTime > 2500)) {
             document.body.classList.remove('perf-boost');
             boostActive = false;
-            console.info(`[90 FPS Engine] Frame rate smooth (${currentFps} FPS). 'perf-boost' deactivated.`);
+            console.info(`[90 FPS Engine] Frame rate sustained at 90 FPS target (${currentFps} FPS). 'perf-boost' deactivated.`);
           }
         }
 
         setMetrics({
           fps: currentFps,
-          targetFps: targetFpsRef.current,
+          targetFps: target,
           isBoostActive: boostActive,
           frameDropCount: lowFpsCount,
           avgFrameTimeMs: Math.round(avgFrameTime * 10) / 10,
@@ -84,6 +98,16 @@ export function useGlobalPerfObserver(initialTargetFps: number = 90) {
 
     animationFrameId = requestAnimationFrame(checkPerformance);
 
+    // Tab visibility handling to avoid false drops upon tab switching
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        lastTime = performance.now();
+        frameCount = 0;
+        totalFrameTime = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // LongTask PerformanceObserver
     let observer: PerformanceObserver | null = null;
     if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
@@ -91,6 +115,7 @@ export function useGlobalPerfObserver(initialTargetFps: number = 90) {
         observer = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
             if (entry.duration > 45) {
+              lastBoostTime = performance.now();
               if (!document.body.classList.contains('perf-boost')) {
                 document.body.classList.add('perf-boost');
                 console.warn(`[90 FPS Engine] CPU spike (${Math.round(entry.duration)}ms). 'perf-boost' triggered.`);
@@ -106,6 +131,7 @@ export function useGlobalPerfObserver(initialTargetFps: number = 90) {
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (observer) observer.disconnect();
     };
   }, []);

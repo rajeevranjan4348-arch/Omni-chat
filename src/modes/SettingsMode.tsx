@@ -169,20 +169,6 @@ export const SettingsMode: React.FC = () => {
           </div>
         )}
 
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Cpu size={24} className="text-cyan-400" />
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">AI & LLM Engine Settings</h1>
-            </div>
-            <p className={`text-sm ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>
-              Customize LLM hyperparameters, system instructions, AI memory bank, custom endpoints, and prompt templates.
-            </p>
-          </div>
-
-        </header>
-
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-white/10 text-xs sm:text-sm font-semibold">
           <button

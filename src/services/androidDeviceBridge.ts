@@ -54,6 +54,17 @@ export type AndroidBridgeResult = {
   error?: string;
 };
 
+declare global {
+  interface Window {
+    AndroidBridge?: {
+      execute(commandJson: string): string;
+      openAccessibilitySettings?(): void;
+      openApp?(packageName: string): boolean;
+      openUrl?(url: string): boolean;
+    };
+  }
+}
+
 const DEFAULT_TIMEOUT = 12_000;
 
 function getConfig(): AndroidBridgeConfig {
@@ -88,7 +99,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const androidDeviceBridge = {
   isConfigured(): boolean {
-    return !!localStorage.getItem('omni_android_bridge_url');
+    return this.isNative() || !!localStorage.getItem('omni_android_bridge_url');
   },
 
   setConfig(baseUrl: string, token?: string) {
@@ -102,11 +113,24 @@ export const androidDeviceBridge = {
     localStorage.removeItem('omni_android_bridge_token');
   },
 
+  isNative(): boolean {
+    return typeof window !== 'undefined' && !!window.AndroidBridge;
+  },
+
   async getScreen(): Promise<AndroidScreen> {
+    if (this.isNative()) {
+      const result = JSON.parse(window.AndroidBridge!.execute(JSON.stringify({ get_screen: true })));
+      if (!result.ok) throw new Error(result.error || 'Android screen read failed');
+      return result;
+    }
     return request<AndroidScreen>('/screen?compact=true');
   },
 
   async act(action: AndroidAction): Promise<AndroidBridgeResult> {
+    if (this.isNative()) {
+      const result = JSON.parse(window.AndroidBridge!.execute(JSON.stringify(action)));
+      return result;
+    }
     return request<AndroidBridgeResult>('/act', {
       method: 'POST',
       body: JSON.stringify(action),

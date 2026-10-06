@@ -91,6 +91,20 @@ export default function App() {
   const { wakeWordTriggerBanner } = useWakeWord((transcript) => {
     setCurrentMode('jarvis');
     setWakeWordTriggered(true);
+
+    // JARVIS-style wake acknowledgement. The existing UI is untouched.
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance('Yes sir, kya hua?');
+        utterance.rate = 1.02;
+        utterance.pitch = 0.9;
+        utterance.volume = 1;
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (e) {
+      console.debug('[JARVIS] wake acknowledgement unavailable', e);
+    }
     setTimeout(() => setWakeWordTriggered(false), 1200);
 
     // Persist wake-word trigger transcript

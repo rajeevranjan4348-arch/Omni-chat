@@ -20,6 +20,8 @@ interface VoiceSession {
   model?: string;
   hasRecording?: boolean;
   audioMimeType?: string;
+  type?: 'voice';
+  history?: VoiceHistoryItem[];
 }
 
 interface VoiceHistoryItem {
@@ -432,6 +434,7 @@ export const VoiceMode: React.FC = () => {
       duration: '--'
     };
     setSessions(prev => [newSession, ...prev]);
+    setInteractionHistory([]);
     setCurrentSessionId(newSession.id);
   };
 
@@ -630,8 +633,15 @@ export const VoiceMode: React.FC = () => {
         .map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`)
         .join('\n\n');
 
+      const savedHistory = interactionHistoryRef.current.map(item => ({
+        ...item,
+        timestamp: item.timestamp instanceof Date ? item.timestamp : new Date(item.timestamp)
+      }));
+
       const updatedSess = { 
-        status: 'Completed' as const, 
+        status: 'Completed' as const,
+        type: 'voice' as const,
+        history: savedHistory, 
         duration: formatted,
         durationSecs: Math.floor(durationMs / 1000),
         audioPath: `/storage/emulated/0/AI/history/session_${currentSessionId}.m4a`,
@@ -908,6 +918,10 @@ export const VoiceMode: React.FC = () => {
                     onClick={() => {
                       if (!isConnected && !isConnecting) {
                         setCurrentSessionId(s.id);
+                        setInteractionHistory((s.history || []).map((item: any) => ({
+                          ...item,
+                          timestamp: new Date(item.timestamp)
+                        })));
                       }
                     }}
                     className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${

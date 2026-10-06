@@ -94,6 +94,11 @@ export const VoiceMode: React.FC = () => {
   const [showDrawer, setShowDrawer] = useState(true);
   const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   const [interactionHistory, setInteractionHistory] = useState<VoiceHistoryItem[]>([]);
+  const interactionHistoryRef = useRef<VoiceHistoryItem[]>([]);
+
+  useEffect(() => {
+    interactionHistoryRef.current = interactionHistory;
+  }, [interactionHistory]);
 
   useEffect(() => {
     isConnectedRef.current = isConnected;

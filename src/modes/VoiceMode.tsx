@@ -139,6 +139,7 @@ export const VoiceMode: React.FC = () => {
             id: `${currentSessionPrefix}-${i}`,
             timestamp: msg.timestamp instanceof Date ? msg.timestamp.getTime() : new Date(msg.timestamp).getTime(),
             source: 'voice-live',
+            type: 'voice',
             text: msg.text,
             title: `Voice Command`,
             messages: [

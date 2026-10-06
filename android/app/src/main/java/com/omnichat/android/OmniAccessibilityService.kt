@@ -17,10 +17,6 @@ class OmniAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var instance: OmniAccessibilityService? = null
 
-        override fun onServiceConnected() {
-            // handled by instance method below
-        }
-
         fun executeCommand(context: Context, request: JSONObject): JSONObject {
             val service = instance
                 ?: return JSONObject().apply {

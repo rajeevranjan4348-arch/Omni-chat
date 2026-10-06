@@ -12,6 +12,7 @@ import { OcrModal } from '../components/OcrModal';
 import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
 import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
 import { buildLearningContext, extractExplicitLearning, mergeLearnedMemory } from '../services/aiLearning';
+import { buildJarvisSystemInstruction, classifyJarvisCommand, getJarvisCapabilitySummary } from '../services/jarvisCore';
 
 /* ─── Keyframe animations ─────────────────────────────── */
 const STYLES = `
@@ -479,11 +480,12 @@ export const OmniChatMode: React.FC = () => {
   const initChat = useCallback((currentMessages: Msg[] = messages) => {
     if (!apiKey) return;
     const ai = getAiInstance();
-    let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure.`;
+    let sys = buildJarvisSystemInstruction(`You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure.`);
     if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
     if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
     const learningContext = buildLearningContext(memory);
     if (learningContext) sys += `\n\n${learningContext}`;
+    sys += `\n\nCurrent capability set: ${getJarvisCapabilitySummary(false)}.`;
     const history = currentMessages.filter(m => !m.streaming && m.text).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
     chatRef.current = ai.chats.create({
       model: 'gemini-3.5-flash',
@@ -501,6 +503,13 @@ export const OmniChatMode: React.FC = () => {
 
   const sendMessage = async (text: string, currentAttachments: Attachment[] = attachments) => {
     if ((!text.trim() && currentAttachments.length === 0) || isLoading) return;
+
+    // Parse the user's intent before handing the request to the model.
+    // Execution remains tool/bridge-driven; this never fabricates device actions.
+    const jarvisCommand = classifyJarvisCommand(text);
+    if (jarvisCommand.requiresConfirmation && jarvisCommand.intent !== 'chat') {
+      console.info('[JARVIS] consequential action detected:', jarvisCommand.intent);
+    }
     if (!apiKey) {
       setMessages(prev => [
         ...prev,

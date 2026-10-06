@@ -142,6 +142,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
       raw.forEach(c => {
         const msgs = c.messages || [];
         const lastMsg = msgs.slice().reverse().find((m: any) => m.role === 'model')?.text || msgs[0]?.text || '';
+        const allText = msgs.map((m: any) => m.text || m.content || '').join(' ');
         globalItems.push({
           id: `omni-${c.id}`,
           category: 'chats',
@@ -149,6 +150,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
           subtitle: lastMsg.slice(0, 120) || 'No messages yet',
           icon: React.createElement(Sparkles, { size: 16, className: 'text-violet-400' }),
           sourceLabel: 'Omni Chat',
+          highlightText: allText,
           updatedAt: toTs(c.updatedAt),
           action: () => {
             localStorage.setItem('omnichat_omni_current_session', c.id);
@@ -167,6 +169,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
       raw.forEach(s => {
         const msgs = s.messages || [];
         const lastMsg = msgs.slice().reverse().find((m: any) => m.role === 'model')?.text || msgs[0]?.text || '';
+        const allText = msgs.map((m: any) => m.text || m.content || '').join(' ');
         globalItems.push({
           id: `liquid-${s.id}`,
           category: 'chats',
@@ -174,6 +177,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
           subtitle: lastMsg.slice(0, 120) || 'Fluid conversation stream',
           icon: React.createElement(Sparkles, { size: 16, className: 'text-pink-400' }),
           sourceLabel: 'Liquid Chat',
+          highlightText: allText,
           updatedAt: toTs(s.updatedAt),
           action: () => {
             localStorage.setItem('omnichat_liquid_current', s.id);
@@ -192,6 +196,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
       raw.forEach(s => {
         const msgs = s.messages || [];
         const lastMsg = msgs.slice().reverse().find((m: any) => m.role === 'model')?.text || msgs[0]?.content || s.prompt || '';
+        const allText = (s.prompt || '') + ' ' + msgs.map((m: any) => m.text || m.content || '').join(' ');
         globalItems.push({
           id: `manus-${s.id}`,
           category: 'chats',
@@ -199,6 +204,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
           subtitle: lastMsg.slice(0, 120) || 'Agent execution flow',
           icon: React.createElement(Sparkles, { size: 16, className: 'text-emerald-400' }),
           sourceLabel: 'Manus Agent',
+          highlightText: allText,
           updatedAt: toTs(s.timestamp || s.updatedAt),
           action: () => {
             localStorage.setItem('omnichat_manus_current_session_id', s.id);
@@ -284,6 +290,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
         const chatSnap = await getDocs(collection(db, 'users', user.uid, 'chat_history'));
         chatSnap.forEach(docSnap => {
           const data = docSnap.data();
+          const msgsText = (data.messages || []).map((m: any) => m.text || '').join(' ');
           globalItems.push({
             id: `fb-chat-${docSnap.id}`,
             category: 'chats',
@@ -291,6 +298,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
             subtitle: data.lastMessage || `${data.messagesCount || 0} messages synced in cloud`,
             icon: React.createElement(Sparkles, { size: 16, className: 'text-purple-400' }),
             sourceLabel: 'Firebase Cloud Chat',
+            highlightText: (data.title || '') + ' ' + (data.lastMessage || '') + ' ' + msgsText,
             updatedAt: toTs(data.updatedAt),
             action: () => {
               if (data.source) onModeChange(data.source);
@@ -308,6 +316,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
         const filesSnap = await getDocs(collection(db, 'users', user.uid, 'stored_files'));
         filesSnap.forEach(docSnap => {
           const data = docSnap.data();
+          const fileSearchable = `${data.name || ''} ${data.description || ''} ${(data.tags || []).join(' ')} ${data.mimeType || ''} ${data.source || ''}`;
           globalItems.push({
             id: `fb-file-${docSnap.id}`,
             category: 'files',
@@ -315,6 +324,7 @@ export async function indexKnowledgeBase(onModeChange: (mode: any) => void): Pro
             subtitle: data.description || `${data.mimeType || 'file'} • ${Math.round((data.size || 0) / 1024)} KB`,
             icon: React.createElement(FileText, { size: 16, className: 'text-emerald-400' }),
             sourceLabel: 'Firebase Stored File',
+            highlightText: fileSearchable,
             updatedAt: toTs(data.updatedAt),
             action: () => {
               if (data.url) {

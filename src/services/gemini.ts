@@ -1,4 +1,5 @@
 import { GoogleGenAI, ThinkingLevel, Modality } from "@google/genai";
+import { executeAiWithTransientRetry, isTransientNetworkError } from "../hooks/useGlobalAiErrorListener";
 
 const wrapAiWithFallback = (aiInstance: any) => {
   const isQuotaOrPermissionError = (err: any) => {
@@ -38,7 +39,6 @@ const wrapAiWithFallback = (aiInstance: any) => {
   const adjustConfigForFallback = (config: any) => {
     if (!config) return config;
     const newConfig = { ...config };
-    // Strip or normalize any parameters if necessary
     return newConfig;
   };
 
@@ -50,27 +50,29 @@ const wrapAiWithFallback = (aiInstance: any) => {
           get(modelsTarget, modelsProp) {
             if (modelsProp === 'generateContent') {
               return async function(params: any) {
-                try {
-                  return await modelsTarget.generateContent(params);
-                } catch (err) {
-                  if (isQuotaOrPermissionError(err)) {
-                    const originalModel = params?.model || '';
-                    const fallbackModel = getFallbackModel(originalModel);
-                    console.warn(`[Gemini Fallback] Original model '${originalModel}' failed with quota/permission. Retrying with '${fallbackModel}'...`, err);
-                    const fallbackParams = {
-                      ...params,
-                      model: fallbackModel,
-                      config: adjustConfigForFallback(params?.config)
-                    };
-                    try {
-                      return await modelsTarget.generateContent(fallbackParams);
-                    } catch (fallbackErr) {
-                      console.error(`[Gemini Fallback] Fallback model '${fallbackModel}' also failed:`, fallbackErr);
-                      throw fallbackErr;
+                return executeAiWithTransientRetry(async () => {
+                  try {
+                    return await modelsTarget.generateContent(params);
+                  } catch (err) {
+                    if (isQuotaOrPermissionError(err)) {
+                      const originalModel = params?.model || '';
+                      const fallbackModel = getFallbackModel(originalModel);
+                      console.warn(`[Gemini Fallback] Original model '${originalModel}' failed with quota/permission. Retrying with '${fallbackModel}'...`, err);
+                      const fallbackParams = {
+                        ...params,
+                        model: fallbackModel,
+                        config: adjustConfigForFallback(params?.config)
+                      };
+                      try {
+                        return await modelsTarget.generateContent(fallbackParams);
+                      } catch (fallbackErr) {
+                        console.error(`[Gemini Fallback] Fallback model '${fallbackModel}' also failed:`, fallbackErr);
+                        throw fallbackErr;
+                      }
                     }
+                    throw err;
                   }
-                  throw err;
-                }
+                }, { source: `Gemini (${params?.model || 'model'})` });
               };
             }
             

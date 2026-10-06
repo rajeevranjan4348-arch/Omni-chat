@@ -93,7 +93,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ currentMode, onM
     const matchesSearch = !q || 
       item.title.toLowerCase().includes(q) || 
       item.subtitle.toLowerCase().includes(q) ||
-      item.sourceLabel.toLowerCase().includes(q);
+      item.sourceLabel.toLowerCase().includes(q) ||
+      (item.highlightText && item.highlightText.toLowerCase().includes(q));
     const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
     return matchesSearch && matchesCategory;
   });

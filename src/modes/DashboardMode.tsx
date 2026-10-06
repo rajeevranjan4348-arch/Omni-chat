@@ -211,6 +211,7 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
             })}
           </div>
         </motion.div>
+      </motion.div>
 
       {/* Secret Vault Modal */}
       <SecretVaultModal

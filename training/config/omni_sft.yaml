@@ -1,0 +1,13 @@
+model_name_or_path: "REPLACE_WITH_OPEN_WEIGHT_INSTRUCT_MODEL"
+dataset: "training/datasets/sft.jsonl"
+output_dir: "training/output/omni-sft"
+num_train_epochs: 2
+learning_rate: 0.00002
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16
+warmup_ratio: 0.03
+logging_steps: 10
+save_strategy: "steps"
+save_steps: 250
+bf16: true
+gradient_checkpointing: true

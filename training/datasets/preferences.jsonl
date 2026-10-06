@@ -1,0 +1,2 @@
+{"prompt":"Explain recursion simply.","chosen":"Recursion is when a function solves a problem by calling itself on a smaller version of the same problem, with a base case that stops the calls.","rejected":"Recursion is a complex computer science concept involving self-reference and stack frames."}
+{"prompt":"The user asks for current information.","chosen":"I should use an available current-data tool when appropriate rather than pretending my stored knowledge is current.","rejected":"I should confidently answer from memory even when the user asks for today's information."}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { getAiInstance, transcribeAudio } from '../services/gemini';
+import { buildAndroidSystemInstruction } from '../services/androidSystemPrompt';
 import { useSettings } from '../contexts/SettingsContext';
 import { Send, Mic, Square, Loader2, Bot, User, Trash2, RotateCcw, Copy, Check, Sparkles, MessageSquare, Plus, X, FileText, Archive, Download, Paperclip, Video, Briefcase, Pin, PinOff, ScanEye, HelpCircle } from 'lucide-react';
 import { Attachment } from '../types';
@@ -482,10 +483,11 @@ export const OmniChatMode: React.FC = () => {
     if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
     if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
     const history = currentMessages.filter(m => !m.streaming && m.text).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
+    const finalSystemInstruction = buildAndroidSystemInstruction(sys);
     chatRef.current = ai.chats.create({
       model: 'gemini-3.5-flash',
       config: {
-        systemInstruction: { parts: [{ text: sys }] },
+        systemInstruction: { parts: [{ text: finalSystemInstruction }] },
         tools: [{ googleSearch: {} }],
       },
       history: history.length ? history : undefined,

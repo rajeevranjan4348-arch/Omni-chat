@@ -284,6 +284,7 @@ export const syncVoiceCommands = async (localCommands: any[]): Promise<any[]> =>
           id: id,
           title: localItem.title || 'Voice Command',
           source: localItem.source || 'voice-live',
+          type: localItem.type || 'voice',
           text: localItem.text || '',
           messages: localItem.messages || [{ role: 'user', text: localItem.text || '' }],
           updatedAt: localTime
@@ -328,6 +329,7 @@ export const saveVoiceCommandToCloud = async (command: any) => {
       id: id,
       title: command.title || 'Voice Command',
       source: command.source || 'voice-live',
+      type: command.type || 'voice',
       text: command.text || '',
       messages: command.messages || [{ role: 'user', text: command.text || '' }],
       updatedAt: time

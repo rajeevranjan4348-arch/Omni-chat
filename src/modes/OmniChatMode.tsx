@@ -11,6 +11,7 @@ import { sounds, triggerHaptic } from '../components/PremiumEffects';
 import { OcrModal } from '../components/OcrModal';
 import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
 import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
+import { buildLearningContext, extractExplicitLearning, mergeLearnedMemory } from '../services/aiLearning';
 
 /* ─── Keyframe animations ─────────────────────────────── */
 const STYLES = `
@@ -213,7 +214,7 @@ const sanitizeConversationsForStorage = (convs: Conversation[]): Conversation[] 
 };
 
 export const OmniChatMode: React.FC = () => {
-  const { userProfile, setMicPermissionError } = useSettings();
+  const { userProfile, setMicPermissionError, memory, setMemory } = useSettings();
   const apiKey = process.env.GEMINI_API_KEY;
 
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -481,13 +482,15 @@ export const OmniChatMode: React.FC = () => {
     let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure.`;
     if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
     if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
+    const learningContext = buildLearningContext(memory);
+    if (learningContext) sys += `\n\n${learningContext}`;
     const history = currentMessages.filter(m => !m.streaming && m.text).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
     chatRef.current = ai.chats.create({
       model: 'gemini-3.5-flash',
       config: { systemInstruction: { parts: [{ text: sys }] } },
       history: history.length ? history : undefined,
     });
-  }, [messages, userProfile, apiKey]);
+  }, [messages, userProfile, memory, apiKey]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -510,6 +513,11 @@ export const OmniChatMode: React.FC = () => {
 
     sounds.playClick();
     triggerHaptic('light');
+
+    const learnedInstruction = extractExplicitLearning(text);
+    if (learnedInstruction) {
+      setMemory(prev => mergeLearnedMemory(prev, learnedInstruction));
+    }
 
     const userMsg: Msg = { id: `u-${Date.now()}`, role: 'user', text, attachments: currentAttachments };
     const modelId = `m-${Date.now() + 1}`;

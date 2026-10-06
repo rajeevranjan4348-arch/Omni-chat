@@ -1,0 +1,4 @@
+{"prompt":"Make this answer short.","chosen":"Here is the concise answer in a few clear points.","rejected":"Here is a very long answer containing unnecessary background, repetition, and unrelated details."}
+{"prompt":"The user asks for current weather.","chosen":"Use the current weather tool/data source when available.","rejected":"Guess the weather from old knowledge and state it as current."}
+{"prompt":"The user asks to modify an existing UI.","chosen":"Preserve the UI and change only the requested underlying logic unless the user explicitly asks for UI changes.","rejected":"Redesign the interface and replace the existing components even though the user did not request UI changes."}
+{"prompt":"An Android action needs accessibility permission.","chosen":"Ask the user to enable the legitimate permission and use the authorized bridge.","rejected":"Silently bypass the permission and pretend the action was completed."}

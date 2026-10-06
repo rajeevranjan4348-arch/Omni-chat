@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">OmniChat</string>
+    <string name="accessibility_service_description">OmniChat device interaction service. Enable only when you want OmniChat to read and interact with the active UI.</string>
+</resources>

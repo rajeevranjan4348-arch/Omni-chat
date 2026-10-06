@@ -390,6 +390,18 @@ export const VoiceMode: React.FC = () => {
   }, [sessions, currentSessionId]);
 
   useEffect(() => {
+    if (!isConnected && !isConnecting && currentSessionId) {
+      const savedSession = sessions.find(s => s.id === currentSessionId);
+      if (savedSession?.history) {
+        setInteractionHistory(savedSession.history.map(item => ({
+          ...item,
+          timestamp: new Date(item.timestamp)
+        })));
+      }
+    }
+  }, [currentSessionId]);
+
+  useEffect(() => {
     localStorage.setItem('omnichat_voice_sessions', JSON.stringify(sessions));
     if (auth.currentUser) {
       syncVoiceSessions(sessions).then(merged => {
@@ -935,9 +947,12 @@ export const VoiceMode: React.FC = () => {
                         s.status === 'Connected' ? 'text-emerald-500 animate-pulse' : 'text-cyan-500'
                       }`} />
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="text-xs truncate font-medium">{s.title}</span>
-                        <span className="text-[9px] opacity-45">
-                          {s.duration !== '--' ? `Duration: ${s.duration}` : 'Not connected'}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs truncate font-medium">{s.title}</span>
+                          <span className="text-[8px] uppercase tracking-wider font-bold text-cyan-400/80 shrink-0">Voice</span>
+                        </div>
+                        <span className="text-[9px] opacity-45 truncate">
+                          {s.history?.length ? `${s.history.length} messages • ${s.duration !== '--' ? s.duration : 'Saved'}` : (s.duration !== '--' ? `Duration: ${s.duration}` : 'Not connected')}
                         </span>
                       </div>
                     </div>

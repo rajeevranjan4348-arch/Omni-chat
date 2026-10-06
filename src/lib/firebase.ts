@@ -411,6 +411,8 @@ export const syncVoiceSessions = async (localSessions: any[]): Promise<any[]> =>
           model: localItem.model || 'Gemini 3.1 Flash Live',
           hasRecording: localItem.hasRecording || false,
           audioMimeType: localItem.audioMimeType || '',
+          type: localItem.type || 'voice',
+          history: Array.isArray(localItem.history) ? localItem.history : [],
           updatedAt: localTime
         };
         uploadPromises.push(setDoc(docRef, payload));
@@ -460,6 +462,8 @@ export const saveVoiceSessionToCloud = async (session: any) => {
       model: session.model || 'Gemini 3.1 Flash Live',
       hasRecording: session.hasRecording || false,
       audioMimeType: session.audioMimeType || '',
+      type: session.type || 'voice',
+      history: Array.isArray(session.history) ? session.history : [],
       updatedAt: time
     });
   } catch (error) {

@@ -176,13 +176,15 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
           </form>
         </motion.div>
 
-        {/* Top Row: Weather + AI Tip + Stats */}
+        {/* Weather */}
         <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
           {/* Weather Card */}
           <div className="md:col-span-1">
             <WeatherDashboard />
           </div>
+        </motion.div>
+
         {/* Quick Actions Grid */}
         <motion.div variants={itemVariants}>
           <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">

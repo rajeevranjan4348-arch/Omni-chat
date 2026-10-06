@@ -478,13 +478,16 @@ export const OmniChatMode: React.FC = () => {
   const initChat = useCallback((currentMessages: Msg[] = messages) => {
     if (!apiKey) return;
     const ai = getAiInstance();
-    let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure.`;
+    let sys = `You are Omni, a brilliant and warm AI assistant. Be genuinely helpful, clear, and concise. When appropriate, use markdown for structure. You have real-time web data access through Google Search. For questions about current, latest, today's, recent, live, changing, or time-sensitive information, use the Google Search tool before answering. Clearly distinguish live/current facts from general knowledge and never pretend stale knowledge is current.`;
     if (userProfile.name) sys += ` The user's name is ${userProfile.name}.`;
     if (userProfile.preferences) sys += ` User context: ${userProfile.preferences}`;
     const history = currentMessages.filter(m => !m.streaming && m.text).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
     chatRef.current = ai.chats.create({
       model: 'gemini-3.5-flash',
-      config: { systemInstruction: { parts: [{ text: sys }] } },
+      config: {
+        systemInstruction: { parts: [{ text: sys }] },
+        tools: [{ googleSearch: {} }],
+      },
       history: history.length ? history : undefined,
     });
   }, [messages, userProfile, apiKey]);
@@ -585,9 +588,18 @@ export const OmniChatMode: React.FC = () => {
 
       const stream = await chatRef.current.sendMessageStream({ message: messageContent });
       let full = '';
+      let groundingChunks: any[] = [];
       for await (const chunk of stream) {
         if (chunk.text) full += chunk.text;
-        setMessages(prev => prev.map(m => m.id === modelId ? { ...m, text: full } : m));
+        const chunkGrounding = (chunk as any).candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (Array.isArray(chunkGrounding)) {
+          groundingChunks = [...groundingChunks, ...chunkGrounding];
+        }
+        setMessages(prev => prev.map(m => m.id === modelId ? {
+          ...m,
+          text: full,
+          groundingChunks: groundingChunks.length ? groundingChunks : undefined
+        } : m));
       }
       sounds.playSuccess();
       triggerHaptic('success');

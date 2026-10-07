@@ -72,15 +72,6 @@ export const ManusMode: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
-              className="bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-300 text-xs px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm focus:outline-none focus:border-blue-500 cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-zinc-850"
-            >
-              <option value="gemini">♊ Gemini 3.8 / Pro</option>
-              <option value="kimi-k3">👑 Kimi-K3 (Super Reasoning)</option>
-            </select>
-
             <button
               onClick={createNewSession}
               className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-850 text-gray-700 dark:text-zinc-300 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer active:scale-95"

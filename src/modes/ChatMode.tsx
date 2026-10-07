@@ -643,7 +643,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
           <div className="flex items-center gap-2 mr-2 min-w-0">
             <div className={`flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm overflow-x-auto hide-scrollbar whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
               <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{mode === 'chat-pro' ? 'Pro Chat' : 'Fast Chat'}</span>
-              <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-purple-950/40 text-purple-400 border border-purple-900/30' : 'bg-purple-50 text-purple-600'}`}>{selectedModel === 'kimi-k3' ? '👑 Kimi-K3' : '💎 Gemini'}</span>
               <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{language}</span>
               <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{personality}</span>
               {urlContext && <span className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${isDarkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><LinkIcon size={10} className="sm:w-3 sm:h-3"/> URL Context</span>}
@@ -680,18 +679,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
 
         {showSettings && (
           <div className={`absolute top-14 left-0 right-0 border-b p-4 shadow-lg z-20 animate-in slide-in-from-top-2 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
-              <div>
-                <label className={`flex items-center gap-2 text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><Brain size={14}/> Active Model</label>
-                <select 
-                  value={selectedModel} 
-                  onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
-                  className={`w-full p-2 text-sm rounded-lg border focus:ring-2 outline-none ${isDarkMode ? 'bg-slate-900 border-slate-600 focus:ring-purple-500 text-white' : 'border-slate-300 focus:ring-purple-500'}`}
-                >
-                  <option value="gemini">💎 Gemini 3.5</option>
-                  <option value="kimi-k3">👑 Kimi-K3 (Super Reasoning)</option>
-                </select>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl mx-auto">
               <div>
                 <label className={`flex items-center gap-2 text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}><Globe size={14}/> Language</label>
                 <select 

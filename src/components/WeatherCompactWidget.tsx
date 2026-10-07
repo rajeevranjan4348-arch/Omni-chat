@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Navigation, ChevronRight, Sun, Cloud, CloudRain, CloudDrizzle, 
   Snowflake, CloudLightning, SunDim, Sparkles, Droplets
@@ -133,15 +133,15 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
 
   // Temperatures formatted to current unit
   const temp = unit === 'F' ? Math.round((weather.temp * 9) / 5 + 32) : weather.temp;
-  const highTemp = weather.daily[0] 
+  const highTemp = weather.daily?.[0] 
     ? (unit === 'F' ? Math.round((weather.daily[0].tempMax * 9) / 5 + 32) : weather.daily[0].tempMax) 
     : temp + 3;
-  const lowTemp = weather.daily[0] 
+  const lowTemp = weather.daily?.[0] 
     ? (unit === 'F' ? Math.round((weather.daily[0].tempMin * 9) / 5 + 32) : weather.daily[0].tempMin) 
     : temp - 4;
 
   const aqiInfo = getAqiBadge(weather.aqi);
-  const hourly5 = weather.hourly.slice(0, 5);
+  const hourly5 = weather.hourly?.slice(0, 5) || [];
 
   // Dynamic atmospheric gradient matching weather
   const getAtmosphereGradient = () => {
@@ -178,7 +178,7 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
       className="group relative w-full h-full min-h-[235px] rounded-[28px] overflow-hidden cursor-pointer select-none border border-white/20 hover:border-white/35 transition-all shadow-[0_12px_40px_rgba(0,0,0,0.35)] hover:shadow-[0_16px_50px_rgba(0,0,0,0.45)] text-white"
     >
       {/* Background Dynamic Atmospheric Colors */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${getAtmosphereGradient()} opacity-90`} />
+      <div className={`absolute inset-0 bg-gradient-to-br ${getAtmosphereGradient()} opacity-90 transition-all duration-700 ease-in-out`} />
       <div className="absolute inset-0 bg-black/15 backdrop-blur-[1px]" />
       
       {/* Particle & Lighting Overlay */}
@@ -189,33 +189,59 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
       />
 
       {/* Subtle Ambient CSS Atmospheric Animations based on Current Condition */}
-      {/* 1. Gentle Rain Drop Streaks for Rain */}
-      {((weather.code >= 51 && weather.code <= 65) || (weather.code >= 80 && weather.code <= 82)) && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5] opacity-35" aria-hidden="true">
-          <span 
-            className="absolute top-2 right-16 w-[1.5px] h-6 rounded-full bg-cyan-200 animate-weather-raindrop" 
-            style={{ animationDelay: '0.2s', animationDuration: '1.2s' }} 
-          />
-          <span 
-            className="absolute top-8 right-28 w-[1px] h-5 rounded-full bg-sky-200 animate-weather-raindrop" 
-            style={{ animationDelay: '0.6s', animationDuration: '1.4s' }} 
-          />
-          <span 
-            className="absolute top-1 right-36 w-[1px] h-7 rounded-full bg-blue-200 animate-weather-raindrop" 
-            style={{ animationDelay: '0.9s', animationDuration: '1.1s' }} 
-          />
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {/* 1. Gentle Rain Drop Streaks for Rain */}
+        {((weather.code >= 51 && weather.code <= 65) || (weather.code >= 80 && weather.code <= 82)) && (
+          <motion.div 
+            key="weather-ambient-rain"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.35 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="absolute inset-0 pointer-events-none overflow-hidden z-[5]" 
+            aria-hidden="true"
+          >
+            <span 
+              className="absolute top-2 right-16 w-[1.5px] h-6 rounded-full bg-cyan-200 animate-weather-raindrop" 
+              style={{ animationDelay: '0.2s', animationDuration: '1.2s' }} 
+            />
+            <span 
+              className="absolute top-8 right-28 w-[1px] h-5 rounded-full bg-sky-200 animate-weather-raindrop" 
+              style={{ animationDelay: '0.6s', animationDuration: '1.4s' }} 
+            />
+            <span 
+              className="absolute top-1 right-36 w-[1px] h-7 rounded-full bg-blue-200 animate-weather-raindrop" 
+              style={{ animationDelay: '0.9s', animationDuration: '1.1s' }} 
+            />
+          </motion.div>
+        )}
 
-      {/* 2. Floating Cloud Mist Wisps for Cloudy/Overcast */}
-      {(weather.code === 2 || weather.code === 3 || weather.code === 45 || weather.code === 48) && (
-        <div className="absolute -top-4 -right-4 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none z-[5] animate-weather-cloud-float" aria-hidden="true" />
-      )}
+        {/* 2. Floating Cloud Mist Wisps for Cloudy/Overcast */}
+        {(weather.code === 2 || weather.code === 3 || weather.code === 45 || weather.code === 48) && (
+          <motion.div 
+            key="weather-ambient-cloud"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="absolute -top-4 -right-4 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none z-[5] animate-weather-cloud-float" 
+            aria-hidden="true" 
+          />
+        )}
 
-      {/* 3. Radiant Warm Glow for Sunny */}
-      {(weather.code === 0 || weather.code === 1) && (
-        <div className="absolute top-2 right-6 w-32 h-32 rounded-full bg-amber-400/15 blur-2xl pointer-events-none z-[5] animate-weather-sun-pulse" aria-hidden="true" />
-      )}
+        {/* 3. Radiant Warm Glow for Sunny */}
+        {(weather.code === 0 || weather.code === 1) && (
+          <motion.div 
+            key="weather-ambient-sun"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="absolute top-2 right-6 w-32 h-32 rounded-full bg-amber-400/15 blur-2xl pointer-events-none z-[5] animate-weather-sun-pulse" 
+            aria-hidden="true" 
+          />
+        )}
+      </AnimatePresence>
 
       {/* Widget Content Container */}
       <div className="relative z-10 p-5 flex flex-col justify-between min-h-[235px]">
@@ -234,15 +260,29 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
           </div>
         </div>
 
-        {/* MIDDLE SECTION: Large Temperature, Condition, H/L & Hero Icon */}
+        {/* MIDDLE SECTION: Large Temperature, Condition, H/L & Hero Icon with Cross-Fade */}
         <div className="flex items-center justify-between my-2">
           <div>
             <div className="text-5xl font-light tracking-[-0.04em] text-white leading-none drop-shadow-md">
               {temp}°
             </div>
-            <div className="text-sm font-medium text-white/95 mt-1.5 drop-shadow-sm">
-              {weather.desc}
+            
+            {/* Condition Description with Cross-fade transition */}
+            <div className="h-5 flex items-center mt-1.5 overflow-hidden">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={weather.desc}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.28, ease: 'easeOut' }}
+                  className="text-sm font-medium text-white/95 drop-shadow-sm"
+                >
+                  {weather.desc}
+                </motion.div>
+              </AnimatePresence>
             </div>
+
             <div className="text-xs font-normal text-white/75 mt-0.5 flex items-center gap-2">
               <span>H: {highTemp}°</span>
               <span className="opacity-40">•</span>
@@ -250,7 +290,7 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
             </div>
           </div>
 
-          {/* Hero Weather Icon with Ambient Dynamic Condition Animations */}
+          {/* Hero Weather Icon with Ambient Dynamic Condition Animations & Cross-Fade */}
           <div className="relative flex items-center justify-center p-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-inner group-hover:scale-105 transition-transform">
             <div className="absolute inset-0 rounded-2xl bg-white/20 blur-md opacity-40 pointer-events-none" />
             <div className="relative z-10">

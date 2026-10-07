@@ -741,14 +741,6 @@ export const OmniChatMode: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
-                className="bg-zinc-900/60 text-zinc-300 text-[11px] font-medium px-2 py-1.5 rounded-lg border border-violet-500/20 focus:outline-none focus:border-violet-500 mr-2 cursor-pointer transition-all hover:bg-zinc-800"
-              >
-                <option value="gemini">♊ Gemini 3.5</option>
-                <option value="kimi-k3">👑 Kimi-K3 (Super Reasoning)</option>
-              </select>
               <button onClick={() => setIsMobileHistoryOpen(true)} title="Chat History"
                 className="md:hidden p-2 rounded-lg transition-all hover:bg-white/5 mr-1"
                 style={{ color: 'rgba(255,255,255,0.3)' }}>

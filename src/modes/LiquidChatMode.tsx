@@ -844,24 +844,6 @@ export const LiquidChatMode: React.FC = () => {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value as 'gemini' | 'kimi-k3')}
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '10px',
-              color: '#fff',
-              fontSize: '12px',
-              padding: '8px 10px',
-              cursor: 'pointer',
-              outline: 'none',
-              marginRight: '4px'
-            }}
-          >
-            <option value="gemini" style={{ background: '#111' }}>♊ Gemini 3.5</option>
-            <option value="kimi-k3" style={{ background: '#111' }}>👑 Kimi-K3</option>
-          </select>
           <button onClick={() => setShowHistory(!showHistory)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: showHistory ? `${theme.a1}20` : 'rgba(255,255,255,0.05)', border: `1px solid ${showHistory ? theme.a1 : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showHistory ? theme.a1 : 'rgba(255,255,255,0.7)', cursor: 'pointer' }} title="Toggle Chat History">
             <MessageSquare size={16} />
           </button>

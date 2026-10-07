@@ -13,6 +13,7 @@ import { WeatherNotifications } from './WeatherNotifications';
 import { WeatherSoundSynth } from '../utils/weatherSoundSynth';
 import { WeatherCompactWidget } from './WeatherCompactWidget';
 import { WeatherHourlyCurve } from './WeatherHourlyCurve';
+import { AnimatedWeatherHeroIcon } from './AnimatedWeatherHeroIcon';
 import { 
   SolarArcCard, AqiCard, WindCompassCard, UvIndexCard, 
   HumidityCard, VisibilityPressureCard, DailyForecastRow 
@@ -766,9 +767,42 @@ export const WeatherDashboard: React.FC = () => {
                       <span>AQI {weather.aqi} • {weather.aqi <= 50 ? 'Good' : weather.aqi <= 100 ? 'Moderate' : 'Poor'}</span>
                     </div>
 
-                    {/* Big Condition Icon */}
-                    <div className="p-4 rounded-3xl bg-white/5 border border-white/10 shadow-inner flex items-center justify-center scale-110">
-                      {activeWeatherInfo?.icon}
+                    {/* Big Condition Icon with Cross-Fade Animation */}
+                    <div className="p-3.5 rounded-3xl bg-white/5 border border-white/10 shadow-inner flex items-center justify-center scale-110">
+                      <AnimatedWeatherHeroIcon code={weather.code} size={50} />
+                    </div>
+
+                    {/* Quick Condition Simulation Switcher to demonstrate Cross-Fade Animation */}
+                    <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/10 text-[11px] backdrop-blur-sm">
+                      <span className="text-white/40 px-1 text-[10px] font-medium">Fade:</span>
+                      <button
+                        onClick={() => setWeather(prev => prev ? { ...prev, code: 0, desc: 'Clear Sky' } : null)}
+                        className={`px-2 py-0.5 rounded-lg transition-all ${weather.code === 0 ? 'bg-amber-500/30 text-amber-300 font-semibold' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                        title="Switch to Sunny condition"
+                      >
+                        ☀️ Sun
+                      </button>
+                      <button
+                        onClick={() => setWeather(prev => prev ? { ...prev, code: 2, desc: 'Partly Cloudy' } : null)}
+                        className={`px-2 py-0.5 rounded-lg transition-all ${weather.code === 2 ? 'bg-indigo-500/30 text-indigo-200 font-semibold' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                        title="Switch to Cloudy condition"
+                      >
+                        ⛅ Cloud
+                      </button>
+                      <button
+                        onClick={() => setWeather(prev => prev ? { ...prev, code: 61, desc: 'Rain Showers' } : null)}
+                        className={`px-2 py-0.5 rounded-lg transition-all ${weather.code === 61 ? 'bg-cyan-500/30 text-cyan-200 font-semibold' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                        title="Switch to Rain condition"
+                      >
+                        🌧️ Rain
+                      </button>
+                      <button
+                        onClick={() => setWeather(prev => prev ? { ...prev, code: 95, desc: 'Thunderstorm' } : null)}
+                        className={`px-2 py-0.5 rounded-lg transition-all ${weather.code === 95 ? 'bg-yellow-500/30 text-yellow-300 font-semibold' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                        title="Switch to Thunderstorm condition"
+                      >
+                        ⚡ Storm
+                      </button>
                     </div>
 
                   </div>

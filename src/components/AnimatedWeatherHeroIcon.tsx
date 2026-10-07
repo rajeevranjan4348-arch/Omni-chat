@@ -1,22 +1,39 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
-   Sun, Cloud, CloudRain, CloudDrizzle, Snowflake, 
-   CloudLightning, SunDim, Droplets, Wind
+  Sun, Cloud, CloudRain, CloudDrizzle, Snowflake, 
+  CloudLightning, SunDim
 } from 'lucide-react';
 
-interface AnimatedWeatherHeroIconProps {
+export interface AnimatedWeatherHeroIconProps {
   code: number;
   size?: number;
+  className?: string;
 }
 
-export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = ({ 
-  code, 
-  size = 38 
-}) => {
+/**
+ * Categorizes weather code to generate a unique key for smooth condition transitions
+ */
+export function getWeatherCategoryKey(code: number): string {
+  if (code === 0 || code === 1) return `sunny-${code}`;
+  if ((code >= 51 && code <= 65) || (code >= 80 && code <= 82)) {
+    const isHeavy = (code >= 63 && code <= 65) || code === 82;
+    return `rain-${isHeavy ? 'heavy' : 'drizzle'}-${code}`;
+  }
+  if (code >= 95) return `thunderstorm-${code}`;
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return `snow-${code}`;
+  if (code === 45 || code === 48) return `fog-${code}`;
+  return `cloudy-${code}`;
+}
+
+/**
+ * Renders the visual animated scene for a specific weather condition
+ */
+function renderHeroIconContent(code: number, size: number) {
   // 1. CLEAR / SUNNY
   if (code === 0 || code === 1) {
     return (
-      <div className="relative flex items-center justify-center w-12 h-12 select-none pointer-events-none">
+      <div className="relative flex items-center justify-center w-full h-full select-none pointer-events-none">
         {/* Pulsing Sun Glow Aura */}
         <div 
           className="absolute inset-0 rounded-full bg-amber-400/25 blur-md animate-weather-sun-pulse" 
@@ -39,7 +56,7 @@ export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = (
   if ((code >= 51 && code <= 65) || (code >= 80 && code <= 82)) {
     const isHeavy = (code >= 63 && code <= 65) || code === 82;
     return (
-      <div className="relative flex items-center justify-center w-12 h-12 select-none pointer-events-none">
+      <div className="relative flex items-center justify-center w-full h-full select-none pointer-events-none">
         {/* Cloud Atmosphere Glow */}
         <div 
           className="absolute inset-0 rounded-full bg-cyan-500/20 blur-md animate-pulse" 
@@ -80,7 +97,7 @@ export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = (
   // 3. THUNDERSTORM
   if (code >= 95) {
     return (
-      <div className="relative flex items-center justify-center w-12 h-12 select-none pointer-events-none">
+      <div className="relative flex items-center justify-center w-full h-full select-none pointer-events-none">
         {/* Electric Flash Backdrop */}
         <div 
           className="absolute inset-0 rounded-full bg-yellow-400/20 blur-md animate-weather-lightning" 
@@ -110,7 +127,7 @@ export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = (
   // 4. SNOW / ICE
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) {
     return (
-      <div className="relative flex items-center justify-center w-12 h-12 select-none pointer-events-none">
+      <div className="relative flex items-center justify-center w-full h-full select-none pointer-events-none">
         <div 
           className="absolute inset-0 rounded-full bg-sky-300/20 blur-md animate-pulse" 
           aria-hidden="true" 
@@ -142,7 +159,7 @@ export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = (
   // 5. FOG / MIST
   if (code === 45 || code === 48) {
     return (
-      <div className="relative flex items-center justify-center w-12 h-12 select-none pointer-events-none">
+      <div className="relative flex items-center justify-center w-full h-full select-none pointer-events-none">
         <div 
           className="absolute inset-0 rounded-full bg-slate-300/15 blur-md" 
           aria-hidden="true" 
@@ -161,9 +178,9 @@ export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = (
     );
   }
 
-  // 6. CLOUDY / OVERCAST (code 2, 3 and default)
+  // 6. CLOUDY / OVERCAST (code 2, 3 and fallback)
   return (
-    <div className="relative flex items-center justify-center w-12 h-12 select-none pointer-events-none">
+    <div className="relative flex items-center justify-center w-full h-full select-none pointer-events-none">
       {/* Soft Ambient Cloud Glow */}
       <div 
         className="absolute inset-0 rounded-full bg-indigo-300/15 blur-md" 
@@ -185,6 +202,56 @@ export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = (
           className="text-slate-100 drop-shadow-[0_4px_12px_rgba(255,255,255,0.25)]" 
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * AnimatedWeatherHeroIcon with cross-fade animation when condition icon updates
+ */
+export const AnimatedWeatherHeroIcon: React.FC<AnimatedWeatherHeroIconProps> = ({ 
+  code, 
+  size = 38,
+  className = ''
+}) => {
+  const conditionKey = getWeatherCategoryKey(code);
+  const containerDimension = Math.max(48, size + 10);
+
+  return (
+    <div 
+      className={`relative flex items-center justify-center select-none pointer-events-none overflow-visible ${className}`}
+      style={{ width: containerDimension, height: containerDimension }}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.div
+          key={conditionKey}
+          initial={{ 
+            opacity: 0, 
+            scale: 0.78, 
+            filter: 'blur(5px)',
+            rotate: -8
+          }}
+          animate={{ 
+            opacity: 1, 
+            scale: 1, 
+            filter: 'blur(0px)',
+            rotate: 0
+          }}
+          exit={{ 
+            opacity: 0, 
+            scale: 0.78, 
+            filter: 'blur(5px)',
+            rotate: 8
+          }}
+          transition={{ 
+            duration: 0.45, 
+            ease: [0.16, 1, 0.3, 1] 
+          }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          {renderHeroIconContent(code, size)}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 };

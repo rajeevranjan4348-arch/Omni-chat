@@ -11,6 +11,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
 import { motion, AnimatePresence } from 'motion/react';
+import { prepareAgentContext, formatAgentContext } from '../services/hermesAgent';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 
 interface ChatModeProps {
@@ -234,7 +235,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
         systemInstruction += `Your tone is helpful, clear, and concise.`;
     }
     
-    systemInstruction += `\n\nPlease respond in ${language}.`;
+    systemInstruction += `\n\nPlease respond in ${language}.\n\nYou operate as Omni Agent: understand the task, plan the next steps, use available realtime/tools when needed, verify important results, preserve useful context, and never claim an unsupported action was completed. For current information, trust verified tool results over model memory.`;
     
     if (userProfile.name) {
       systemInstruction += `\n\nThe user's name is ${userProfile.name}.`;
@@ -395,8 +396,23 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
     }
 
     let messageToSend: any = text;
+
+    // Hermes-inspired agent preflight: classify, plan, retrieve fresh data when required,
+    // and attach bounded verified context before the model reasons over the request.
+    let agentContextText = '';
+    try {
+      const agentContext = await prepareAgentContext(text);
+      agentContextText = formatAgentContext(agentContext);
+    } catch (agentError) {
+      console.warn('[Omni Agent] Preflight unavailable; continuing with normal chat:', agentError);
+    }
+
+    if (agentContextText) {
+      messageToSend = `${agentContextText}\n\nUSER REQUEST:\n${text}`;
+    }
+
     if (urlContext.trim() && messages.length === 0) {
-      messageToSend = `Context URL: ${urlContext}\n\n${text}`;
+      messageToSend = `Context URL: ${urlContext}\n\n${messageToSend}`;
     }
 
     if (attachments && attachments.length > 0) {
@@ -644,7 +660,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ mode }) => {
             <div className={`flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm overflow-x-auto hide-scrollbar whitespace-nowrap ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
               <span className={`font-medium ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{mode === 'chat-pro' ? 'Pro Chat' : 'Fast Chat'}</span>
               <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{language}</span>
-              <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{personality}</span>
+              <span className={`px-2 py-0.5 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>{personality}</span>\n              <span className={`px-2 py-0.5 rounded-full font-medium ${isDarkMode ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>Agent</span>
               {urlContext && <span className={`px-2 py-0.5 rounded-full flex items-center gap-1 ${isDarkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><LinkIcon size={10} className="sm:w-3 sm:h-3"/> URL Context</span>}
             </div>
           </div>

@@ -1,0 +1,11 @@
+{
+  "name": "Omni Chat AI Agent",
+  "short_name": "Omni Agent",
+  "description": "Mobile-ready AI agent with realtime data, memory and task orchestration.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "orientation": "portrait-primary",
+  "icons": []
+}

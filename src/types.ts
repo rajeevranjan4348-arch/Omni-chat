@@ -11,7 +11,8 @@ export type AppMode =
   | 'jarvis'
   | 'coder'
   | 'workspace'
-  | 'settings';
+  | 'settings'
+  | 'library';
 
 export interface Attachment {
   name: string;

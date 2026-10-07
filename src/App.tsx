@@ -91,7 +91,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [wakeWordTriggered, setWakeWordTriggered] = useState(false);
   const [voiceSearchTrigger, setVoiceSearchTrigger] = useState<number>(0);
-  const { getBgClass, getTextClass } = useTheme();
+  const { getBgClass, getTextClass, wallpaper } = useTheme();
   const { wakeWordSensitivity } = useSettings();
 
 
@@ -242,7 +242,7 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen w-full overflow-hidden relative ${getBgClass()} ${getTextClass()}`}>
+    <div className={`flex h-screen w-full overflow-hidden relative ${wallpaper ? 'bg-transparent' : getBgClass()} ${getTextClass()}`} style={wallpaper ? { background: 'transparent' } : undefined}>
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div
@@ -260,7 +260,7 @@ export default function App() {
       </div>
 
 
-      <main className={`flex-1 h-full overflow-hidden relative flex flex-col ${getBgClass()}`}>
+      <main className={`flex-1 h-full overflow-hidden relative flex flex-col ${wallpaper ? 'bg-transparent' : getBgClass()}`} style={wallpaper ? { background: 'transparent' } : undefined}>
         {/* Wake Word Trigger Toast Banner */}
 
         <AnimatePresence>

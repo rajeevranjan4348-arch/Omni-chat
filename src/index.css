@@ -187,9 +187,9 @@
 }
 
 /* =====================================
-   EXPERIMENTAL FRAME RATE BOOST (90 FPS)
+   EXPERIMENTAL FRAME RATE BOOST
    ===================================== */
-/* Force GPU composite layers for ultra-smooth 90 FPS sliding and transitions */
+
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -202,12 +202,17 @@
   -webkit-backface-visibility: hidden;
 }
 
+/* Experimental mode: reduce GPU fill-rate and isolate expensive paint work.
+   It never changes layout, sizing, or component structure. */
+html.perf-boost,
 body.perf-boost {
-  /* Prevent fixed background repaint overhead during rapid scrolling */
+  overscroll-behavior: none;
+}
+
+body.perf-boost {
   background-attachment: scroll !important;
 }
 
-/* 1. Optimize Heavy Blur Fragment Shaders (cuts GPU fill rate by >60% with zero layout shift) */
 body.perf-boost .glass,
 body.perf-boost .glass-subtle,
 body.perf-boost .glass-strong,
@@ -216,44 +221,30 @@ body.perf-boost .glass-card,
 body.perf-boost .glass-button,
 body.perf-boost .dash-card,
 body.perf-boost .backdrop-blur-3xl,
+body.perf-boost .backdrop-blur-2xl,
+body.perf-boost .backdrop-blur-xl,
+body.perf-boost .backdrop-blur-lg,
 body.perf-boost .backdrop-blur-md,
 body.perf-boost .backdrop-blur-sm,
 body.perf-boost .backdrop-blur {
   backdrop-filter: blur(8px) saturate(135%) !important;
   -webkit-backdrop-filter: blur(8px) saturate(135%) !important;
-  transition: backdrop-filter 0.25s ease-out, -webkit-backdrop-filter 0.25s ease-out;
   contain: paint;
 }
 
-/* 2. Hardware Acceleration via GPU Compositor Layers without Layer Thrashing or Transform Overwriting */
 body.perf-boost .weather-rain-drop,
 body.perf-boost .weather-drizzle-drop,
 body.perf-boost .weather-snowflake,
 body.perf-boost .weather-cloud-blob,
-body.perf-boost .weather-fog-blob {
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform-style: preserve-3d;
-  contain: layout style paint;
-}
-
-/* Safe GPU layer promotion for animation containers & motion wrappers without layout shift */
+body.perf-boost .weather-fog-blob,
 body.perf-boost .motion-div,
 body.perf-boost .dash-card,
 body.perf-boost .animate-pulse {
   will-change: transform, opacity;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  isolation: isolate;
-  contain: paint;
-}
-
-/* 3. Smooth Scrolling, Antialiasing Stability & Repaint Isolation for High-Load Scenarios */
-body.perf-boost * {
-  scroll-behavior: auto !important; /* Prevents scroll queue backlog during heavy frame drops */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  transform: translate3d(0, 0, 0);
+  contain: layout style paint;
 }
 
 body.perf-boost .overflow-y-auto,
@@ -262,6 +253,19 @@ body.perf-boost .overflow-x-auto {
   overscroll-behavior-y: contain;
 }
 
+/* Avoid spending GPU time on decorative effects while the device is under load. */
+body.perf-boost [data-perf-decoration="true"] {
+  display: none !important;
+}
 
-
-
+/* Respect accessibility: reduced-motion always wins. */
+@media (prefers-reduced-motion: reduce) {
+  body.perf-boost *,
+  body.perf-boost *::before,
+  body.perf-boost *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

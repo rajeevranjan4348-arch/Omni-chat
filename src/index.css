@@ -238,7 +238,7 @@
   border-color: rgba(255,255,255,.14);
   transform: translateY(-1px);
 }
-.glass-button:active { transform: translateY(0); }
+.glass-button:active { transform: translate3d(0,0,0); }
 
 .glass-button:focus-visible,
 .glass-input:focus-visible,
@@ -313,5 +313,34 @@ body.perf-boost [data-perf-decoration="true"] { display: none !important; }
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
+  }
+}
+
+
+/* UI stability + motion polish */
+html, body, #root { min-height: 100%; }
+html { scroll-behavior: smooth; }
+body { overflow: hidden; }
+button, [role="button"], input, textarea, select { touch-action: manipulation; }
+.glass, .glass-subtle, .glass-strong, .glass-input, .glass-card, .glass-button {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.glass-card:hover, .glass-button:hover { transform: translate3d(0,-1px,0); }
+.glass-card, .glass-button, .glass-input {
+  transition-timing-function: cubic-bezier(.22,1,.36,1);
+}
+@media (max-width: 768px) {
+  .glass, .glass-subtle, .glass-strong, .glass-input, .glass-card, .glass-button {
+    backdrop-filter: blur(8px) saturate(125%);
+    -webkit-backdrop-filter: blur(8px) saturate(125%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
   }
 }

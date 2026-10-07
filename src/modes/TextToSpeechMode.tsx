@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, Play, Loader2, AlertCircle, Download, Plus, Trash2, MessageSquare } from 'lucide-react';
 import { generateSpeech } from '../services/gemini';
+import { pcmToWavBlobUrl } from '../utils/readAloud';
 import { useTheme } from '../contexts/ThemeContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
@@ -135,7 +136,7 @@ export const TextToSpeechMode: React.FC = () => {
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       
       if (base64Audio) {
-        const url = `data:audio/mp3;base64,${base64Audio}`;
+        const url = pcmToWavBlobUrl(base64Audio, 24000);
         updateSessionField({ audioUrl: url });
       } else {
         setError('Failed to generate audio. The model did not return audio data.');
@@ -152,7 +153,7 @@ export const TextToSpeechMode: React.FC = () => {
     if (!currentSession?.audioUrl) return;
     const a = document.createElement('a');
     a.href = currentSession.audioUrl;
-    a.download = `speech-${currentSession.voice}-${Date.now()}.mp3`;
+    a.download = `speech-${currentSession.voice}-${Date.now()}.wav`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

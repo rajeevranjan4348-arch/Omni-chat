@@ -19,6 +19,7 @@ import {
   persistChatHistory, 
   deleteConversationFromIDB 
 } from '../utils/chatHistoryDB';
+import { useTabSync } from '../hooks/useTabSync';
 
 /* ─── Keyframe animations ─────────────────────────────── */
 const STYLES = `
@@ -222,6 +223,7 @@ const sanitizeConversationsForStorage = (convs: Conversation[]): Conversation[] 
 
 export const OmniChatMode: React.FC = () => {
   const { userProfile, setMicPermissionError, memory, setMemory } = useSettings();
+  const { pinnedChats, togglePinChat } = useTabSync();
   const apiKey = process.env.GEMINI_API_KEY;
 
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -1238,39 +1240,110 @@ export const OmniChatMode: React.FC = () => {
             >
               <div style={{ width: '260px' }} className="flex flex-col h-full shrink-0">
                 <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-violet-300">History</span>
+                  <div className="flex items-center gap-2 text-violet-300">
+                    <MessageSquare size={15} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Chat Threads</span>
+                  </div>
                   <button 
                     onClick={createNewChat} 
                     title="New Chat"
-                    className="p-1.5 rounded-lg transition-colors hover:bg-white/5 text-violet-300 hover:text-white"
+                    className="p-1.5 rounded-lg transition-colors hover:bg-white/5 text-violet-300 hover:text-white flex items-center gap-1 text-xs font-medium"
                   >
-                    <Plus size={16} />
+                    <Plus size={15} />
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1 hide-scrollbar">
-                  {conversations.map(conv => (
-                    <div 
-                      key={conv.id}
-                      onClick={() => setCurrentConversationId(conv.id)}
-                      className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
-                        currentConversationId === conv.id 
-                          ? 'bg-violet-950/20 text-white border-violet-500/30 shadow-md shadow-violet-950/20' 
-                          : 'hover:bg-white/5 text-slate-400 hover:text-slate-200 border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-                        <MessageSquare size={14} className="shrink-0 opacity-60 text-violet-400" />
-                        <span className="text-xs truncate font-medium">{conv.title}</span>
+                <div className="flex-1 overflow-y-auto p-2 space-y-3 hide-scrollbar">
+                  {/* Pinned Conversations */}
+                  {conversations.filter(c => pinnedChats.includes(c.id)).length > 0 && (
+                    <div className="space-y-1">
+                      <div className="px-2 py-0.5 flex items-center justify-between text-[10px] font-bold tracking-wider text-violet-400 uppercase">
+                        <span className="flex items-center gap-1">
+                          <Pin size={11} className="fill-violet-400 text-violet-400" />
+                          Pinned Threads
+                        </span>
+                        <span>{conversations.filter(c => pinnedChats.includes(c.id)).length}</span>
                       </div>
-                      <button 
-                        onClick={(e) => deleteConversation(conv.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-400 transition-all ml-1 shrink-0"
-                        title="Delete Chat"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {conversations.filter(c => pinnedChats.includes(c.id)).map(conv => (
+                        <div 
+                          key={conv.id}
+                          onClick={() => setCurrentConversationId(conv.id)}
+                          className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                            currentConversationId === conv.id 
+                              ? 'bg-violet-950/35 text-white border-violet-500/40 shadow-sm shadow-violet-950/40' 
+                              : 'hover:bg-white/5 text-slate-200 border-violet-500/15'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                            <MessageSquare size={14} className="shrink-0 text-violet-400" />
+                            <span className="text-xs truncate font-medium">{conv.title}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePinChat(conv.id);
+                              }}
+                              className="p-1 rounded hover:bg-violet-500/20 text-violet-300 hover:text-white transition-all"
+                              title="Unpin Chat"
+                            >
+                              <PinOff size={12} />
+                            </button>
+                            <button 
+                              onClick={(e) => deleteConversation(conv.id, e)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-400 transition-all"
+                              title="Delete Chat"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  {/* Recent / Unpinned Conversations */}
+                  <div className="space-y-1">
+                    {conversations.filter(c => pinnedChats.includes(c.id)).length > 0 && (
+                      <div className="px-2 py-0.5 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
+                        Recent Threads
+                      </div>
+                    )}
+                    {conversations.filter(c => !pinnedChats.includes(c.id)).map(conv => (
+                      <div 
+                        key={conv.id}
+                        onClick={() => setCurrentConversationId(conv.id)}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                          currentConversationId === conv.id 
+                            ? 'bg-violet-950/20 text-white border-violet-500/30 shadow-md shadow-violet-950/20' 
+                            : 'hover:bg-white/5 text-slate-400 hover:text-slate-200 border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                          <MessageSquare size={14} className="shrink-0 opacity-60 text-violet-400" />
+                          <span className="text-xs truncate font-medium">{conv.title}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePinChat(conv.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-slate-400 hover:text-violet-300 transition-all"
+                            title="Pin Chat to top"
+                          >
+                            <Pin size={12} />
+                          </button>
+                          <button 
+                            onClick={(e) => deleteConversation(conv.id, e)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-400 transition-all ml-0.5"
+                            title="Delete Chat"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -1284,12 +1357,12 @@ export const OmniChatMode: React.FC = () => {
             onClick={() => setIsMobileHistoryOpen(false)}
           >
             <div 
-              className="absolute right-0 top-0 bottom-0 w-64 p-4 flex flex-col"
+              className="absolute right-0 top-0 bottom-0 w-72 p-4 flex flex-col"
               style={{ background: '#0e111a', borderLeft: '1px solid rgba(255,255,255,0.08)' }}
               onClick={e => e.stopPropagation()}
             >
               <div className="flex justify-between items-center pb-4 border-b mb-4" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-                <span className="text-sm font-semibold uppercase tracking-wider text-violet-300">History</span>
+                <span className="text-sm font-semibold uppercase tracking-wider text-violet-300">History & Pinned</span>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => { createNewChat(); setIsMobileHistoryOpen(false); }} 
@@ -1306,30 +1379,97 @@ export const OmniChatMode: React.FC = () => {
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto space-y-1 hide-scrollbar">
-                {conversations.map(conv => (
-                  <div 
-                    key={conv.id}
-                    onClick={() => { setCurrentConversationId(conv.id); setIsMobileHistoryOpen(false); }}
-                    className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
-                      currentConversationId === conv.id 
-                        ? 'bg-violet-950/20 text-white border-violet-500/30' 
-                        : 'hover:bg-white/5 text-slate-400 hover:text-slate-200 border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-                      <MessageSquare size={14} className="shrink-0 opacity-60 text-violet-400" />
-                      <span className="text-xs truncate font-medium">{conv.title}</span>
+              <div className="flex-1 overflow-y-auto space-y-3 hide-scrollbar">
+                {/* Mobile Pinned Conversations */}
+                {conversations.filter(c => pinnedChats.includes(c.id)).length > 0 && (
+                  <div className="space-y-1">
+                    <div className="px-2 py-0.5 flex items-center justify-between text-[10px] font-bold tracking-wider text-violet-400 uppercase">
+                      <span className="flex items-center gap-1">
+                        <Pin size={11} className="fill-violet-400 text-violet-400" />
+                        Pinned Threads
+                      </span>
                     </div>
-                    <button 
-                      onClick={(e) => deleteConversation(conv.id, e)}
-                      className="p-1 rounded hover:bg-red-500/20 text-red-400 transition-all ml-1 shrink-0"
-                      title="Delete Chat"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {conversations.filter(c => pinnedChats.includes(c.id)).map(conv => (
+                      <div 
+                        key={conv.id}
+                        onClick={() => { setCurrentConversationId(conv.id); setIsMobileHistoryOpen(false); }}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                          currentConversationId === conv.id 
+                            ? 'bg-violet-950/30 text-white border-violet-500/40' 
+                            : 'hover:bg-white/5 text-slate-200 border-violet-500/15'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                          <MessageSquare size={14} className="shrink-0 text-violet-400" />
+                          <span className="text-xs truncate font-medium">{conv.title}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePinChat(conv.id);
+                            }}
+                            className="p-1 rounded hover:bg-violet-500/20 text-violet-300 transition-all"
+                            title="Unpin Chat"
+                          >
+                            <PinOff size={12} />
+                          </button>
+                          <button 
+                            onClick={(e) => deleteConversation(conv.id, e)}
+                            className="p-1 rounded hover:bg-red-500/20 text-red-400 transition-all"
+                            title="Delete Chat"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {/* Mobile Recent Conversations */}
+                <div className="space-y-1">
+                  {conversations.filter(c => pinnedChats.includes(c.id)).length > 0 && (
+                    <div className="px-2 py-0.5 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
+                      Recent Threads
+                    </div>
+                  )}
+                  {conversations.filter(c => !pinnedChats.includes(c.id)).map(conv => (
+                    <div 
+                      key={conv.id}
+                      onClick={() => { setCurrentConversationId(conv.id); setIsMobileHistoryOpen(false); }}
+                      className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                        currentConversationId === conv.id 
+                          ? 'bg-violet-950/20 text-white border-violet-500/30' 
+                          : 'hover:bg-white/5 text-slate-400 hover:text-slate-200 border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                        <MessageSquare size={14} className="shrink-0 opacity-60 text-violet-400" />
+                        <span className="text-xs truncate font-medium">{conv.title}</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePinChat(conv.id);
+                          }}
+                          className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-violet-300 transition-all"
+                          title="Pin Chat to top"
+                        >
+                          <Pin size={12} />
+                        </button>
+                        <button 
+                          onClick={(e) => deleteConversation(conv.id, e)}
+                          className="p-1 rounded hover:bg-red-500/20 text-red-400 transition-all"
+                          title="Delete Chat"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

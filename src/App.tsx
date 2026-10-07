@@ -23,9 +23,12 @@ import { useSettings } from './contexts/SettingsContext';
 import { useWakeWord } from './hooks/useWakeWord';
 import { MicrophoneErrorModal } from './components/MicrophoneErrorModal';
 import { auth, saveVoiceCommandToCloud } from './lib/firebase';
+import { startVoiceCommandCompressorService } from './services/voiceCommandCompressor';
 import { useGlobalPerfObserver } from './hooks/useGlobalPerfObserver';
 import { useGlobalAiErrorListener } from './hooks/useGlobalAiErrorListener';
 import { usePeriodicAutoSave } from './hooks/usePeriodicAutoSave';
+import { useTabSync } from './hooks/useTabSync';
+import { broadcastSync } from './utils/broadcastSync';
 
 const MODE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -70,6 +73,15 @@ export default function App() {
       }
     } catch (e) {}
     return 'dashboard';
+  });
+
+  const { setAndBroadcastActiveMode } = useTabSync({
+    activeMode: currentMode,
+    onActiveModeChange: (newMode) => {
+      if (VALID_MODES.includes(newMode)) {
+        setCurrentMode(newMode);
+      }
+    }
   });
 
   usePeriodicAutoSave('omnichat_active_mode', currentMode, {
@@ -175,7 +187,14 @@ export default function App() {
 
     // Set up an interval to scan every 15 seconds
     const interval = setInterval(sweepVoiceCommands, 15000);
-    return () => clearInterval(interval);
+
+    // Initialize background Firebase voice commands compressor service
+    const stopCompressor = startVoiceCommandCompressorService(30000);
+
+    return () => {
+      clearInterval(interval);
+      stopCompressor();
+    };
   }, []);
 
   const renderMode = () => {
@@ -212,12 +231,12 @@ export default function App() {
   };
 
   const handleModeChange = (mode: AppMode) => {
-    setCurrentMode(mode);
+    setAndBroadcastActiveMode(mode);
     setIsSidebarOpen(false);
   };
 
   const handleVoiceSearchTrigger = () => {
-    setCurrentMode('search-maps');
+    setAndBroadcastActiveMode('search-maps');
     setVoiceSearchTrigger(Date.now());
     setIsSidebarOpen(false);
   };
@@ -278,16 +297,19 @@ export default function App() {
 
         <div className="flex-1 min-h-0 relative w-full h-full overflow-hidden">
           <ErrorBoundary key={currentMode} modeName={MODE_LABELS[currentMode]}>
-            <motion.div
-              key={currentMode}
-              initial={{ opacity: 0, scale: 0.99, y: 4 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              style={{ willChange: 'opacity, transform' }}
-              className="w-full h-full flex flex-col min-h-0 overflow-hidden transform-gpu"
-            >
-              {renderMode()}
-            </motion.div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentMode}
+                initial={{ opacity: 0, filter: 'blur(12px)', scale: 0.988 }}
+                animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+                exit={{ opacity: 0, filter: 'blur(10px)', scale: 0.99 }}
+                transition={{ duration: 0.26, ease: [0.25, 1, 0.5, 1] }}
+                style={{ willChange: 'opacity, filter, transform' }}
+                className="w-full h-full flex flex-col min-h-0 overflow-hidden transform-gpu"
+              >
+                {renderMode()}
+              </motion.div>
+            </AnimatePresence>
           </ErrorBoundary>
         </div>
       </main>

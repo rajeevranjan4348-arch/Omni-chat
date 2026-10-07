@@ -306,6 +306,11 @@ export const syncVoiceCommands = async (localCommands: any[]): Promise<any[]> =>
       await Promise.all(uploadPromises);
     }
 
+    // Trigger background compression check if threshold reached
+    import('../services/voiceCommandCompressor').then(({ checkAndCompressVoiceCommands }) => {
+      checkAndCompressVoiceCommands(user.uid, 500).catch(() => {});
+    }).catch(() => {});
+
     mergedList.sort((a, b) => b.updatedAt - a.updatedAt);
     return mergedList.slice(0, 150);
   } catch (error) {
@@ -332,6 +337,13 @@ export const saveVoiceCommandToCloud = async (command: any) => {
       messages: command.messages || [{ role: 'user', text: command.text || '' }],
       updatedAt: time
     });
+
+    // Asynchronously trigger threshold check & auto-compression
+    import('../services/voiceCommandCompressor').then(({ checkAndCompressVoiceCommands }) => {
+      checkAndCompressVoiceCommands(user.uid, 500).catch(err => {
+        console.error('Auto-compression trigger error:', err);
+      });
+    }).catch(() => {});
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
   }

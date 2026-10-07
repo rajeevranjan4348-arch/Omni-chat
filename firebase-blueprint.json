@@ -41,6 +41,21 @@
       },
       "required": ["userId", "id", "title", "source", "text", "updatedAt"]
     },
+    "CompressedVoiceCommands": {
+      "title": "CompressedVoiceCommands",
+      "description": "Compressed archive batch of older voice commands data in Firebase",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The Firebase UID of the user" },
+        "id": { "type": "string", "description": "Unique archive ID" },
+        "count": { "type": "number", "description": "Number of voice command entries compressed into this archive" },
+        "compressedData": { "type": "string", "description": "Base64 or JSON string compressed payload containing archived voice command items" },
+        "originalStartDate": { "type": "number", "description": "Earliest timestamp in this compressed batch" },
+        "originalEndDate": { "type": "number", "description": "Latest timestamp in this compressed batch" },
+        "compressedAt": { "type": "number", "description": "Unix timestamp in milliseconds when compression occurred" }
+      },
+      "required": ["userId", "id", "count", "compressedData", "compressedAt"]
+    },
     "VoiceSession": {
       "title": "VoiceSession",
       "description": "Synced voice call recording metadata with duration, simulated audio path, and full text transcript",
@@ -106,6 +121,10 @@
     "users/{userId}/voice_commands/{commandId}": {
       "schema": "VoiceCommand",
       "description": "Synced voice command and wake-word triggers log"
+    },
+    "users/{userId}/compressed_voice_commands/{archiveId}": {
+      "schema": "CompressedVoiceCommands",
+      "description": "Compressed archives of voice commands for high performance"
     },
     "users/{userId}/voice_sessions/{sessionId}": {
       "schema": "VoiceSession",

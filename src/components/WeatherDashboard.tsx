@@ -540,8 +540,23 @@ export const WeatherDashboard: React.FC = () => {
   const activeWeatherInfo = weather ? getWeatherDetails(weather.code) : null;
   const selectedDayData = selectedDayIndex !== null && weather ? weather.daily[selectedDayIndex] : null;
 
+  // Close expanded view on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showLocationModal) {
+          setShowLocationModal(false);
+        } else if (isExpanded) {
+          setIsExpanded(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isExpanded, showLocationModal]);
+
   return (
-    <div className="w-full">
+    <div className="w-full h-full">
       {/* 1. COMPACT WEATHER WIDGET (Image 1 style) */}
       <WeatherCompactWidget
         weather={weather}
@@ -551,20 +566,38 @@ export const WeatherDashboard: React.FC = () => {
         onOpenFull={() => setIsExpanded(true)}
       />
 
-      {/* 2. EXPANDED FULL WEATHER EXPERIENCE (Video 2 style) */}
+      {/* 2. EXPANDED FULL WEATHER EXPERIENCE (Smooth scale-up effect & backdrop blur matching dashboard theme) */}
       <AnimatePresence>
         {isExpanded && weather && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.99 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.99 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-            className={`fixed inset-0 z-50 overflow-y-auto ${
-              localTheme === 'glass-dark' 
-                ? 'bg-slate-950/95 text-white' 
-                : 'bg-slate-900/95 text-white'
-            } ${isPerformanceMode ? 'backdrop-blur-sm' : 'backdrop-blur-2xl'} flex flex-col`}
-          >
+          <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-0 md:p-4 lg:p-6">
+            {/* Backdrop Blur Overlay matching Dashboard Theme */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              onClick={() => setIsExpanded(false)}
+              className="fixed inset-0 bg-[#060814]/85 backdrop-blur-2xl cursor-pointer"
+            >
+              {/* Dashboard-matching subtle ambient violet and cyan light orbs */}
+              <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-violet-600/20 blur-[140px] pointer-events-none" />
+              <div className="absolute top-1/2 -right-32 w-96 h-96 rounded-full bg-cyan-500/20 blur-[150px] pointer-events-none" />
+              <div className="absolute -bottom-32 left-1/3 w-96 h-96 rounded-full bg-indigo-500/15 blur-[130px] pointer-events-none" />
+            </motion.div>
+
+            {/* Modal Card with Smooth Scale-Up Animation matching Dashboard Theme */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.88, y: 28 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 18 }}
+              transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
+              className={`relative z-10 w-full h-full md:max-h-[92vh] md:max-w-6xl md:rounded-[32px] overflow-hidden flex flex-col ${
+                localTheme === 'glass-dark' 
+                  ? 'bg-gradient-to-b from-slate-900/98 via-slate-950/98 to-[#04060d]/98' 
+                  : 'bg-gradient-to-b from-slate-900/98 via-[#0b0f1a]/98 to-slate-950/98'
+              } border border-white/20 shadow-[0_25px_80px_rgba(0,0,0,0.85),0_0_60px_rgba(139,92,246,0.18)] text-white backdrop-blur-3xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* Ambient Background Aura */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-25">
               <div className="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] rounded-full bg-cyan-500/20 blur-[130px]" />
@@ -683,7 +716,7 @@ export const WeatherDashboard: React.FC = () => {
             </div>
 
             {/* EXPANDED CONTENT WRAPPER */}
-            <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6 z-10 relative">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6 z-10 relative">
               
               {/* SEVERE METEOROLOGICAL NOTIFICATION CENTER */}
               <WeatherNotifications weather={weather} />
@@ -982,8 +1015,9 @@ export const WeatherDashboard: React.FC = () => {
             </AnimatePresence>
 
           </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
+    </AnimatePresence>
     </div>
   );
 };

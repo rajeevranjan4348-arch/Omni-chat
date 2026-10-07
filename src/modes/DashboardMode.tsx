@@ -10,7 +10,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { WeatherDashboard } from '../components/WeatherDashboard';
 import { PremiumCard, PremiumButton, ShimmerLoading } from '../components/PremiumEffects';
-import { DashboardClockWidget } from '../components/DashboardClockWidget';
+import { AnalogLiveClockWidget } from '../components/AnalogLiveClockWidget';
 import { SecretVaultModal } from '../components/SecretVaultModal';
 import { FrequentVoiceCommandsModal } from '../components/FrequentVoiceCommandsModal';
 import { KRISHNA_BACKGROUND_IMAGE } from '../assets/krishnaBgData';
@@ -147,13 +147,6 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
               {dateStr}
             </p>
           </div>
-          
-          {/* Top Right Corner Dashboard Clock Widget */}
-          <div className="flex items-center gap-2">
-            <DashboardClockWidget
-              onOpenVault={() => setIsVaultOpen(true)}
-            />
-          </div>
         </motion.div>
 
         {/* Search Bar */}
@@ -178,10 +171,18 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
           </form>
         </motion.div>
 
-        {/* Weather Widget */}
-        <motion.div variants={itemVariants} className="w-full flex justify-center">
-          <div className="w-full max-w-md">
-            <WeatherDashboard />
+        {/* Weather & Live Clock Widgets (Left: Weather with subtle CSS animations, Right: Analog Live Clock from image) */}
+        <motion.div variants={itemVariants} className="w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5 items-stretch">
+            {/* Left Side: Weather Widget with condition animations */}
+            <div className="w-full h-full flex flex-col">
+              <WeatherDashboard />
+            </div>
+
+            {/* Right Side: Analog Live Clock Widget matching user image */}
+            <div className="w-full h-full flex flex-col">
+              <AnalogLiveClockWidget onOpenVault={() => setIsVaultOpen(true)} />
+            </div>
           </div>
         </motion.div>
 

@@ -1,3 +1,5 @@
+declare const Netlify: { env?: { get: (key: string) => string | undefined } } | undefined;
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,

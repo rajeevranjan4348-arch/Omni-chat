@@ -77,6 +77,126 @@
 .animate-fade-in { animation: fade-in .24s ease forwards; }
 .fill-mode-forwards { animation-fill-mode: forwards; }
 
+/* Weather Condition Subtle CSS Animations */
+@keyframes weather-cloud-float {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  50% {
+    transform: translateY(-5px) translateX(2px);
+  }
+}
+.animate-weather-cloud-float {
+  animation: weather-cloud-float 3.8s ease-in-out infinite;
+}
+
+@keyframes weather-cloud-drift-wisp {
+  0% {
+    transform: translateX(-12px);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateX(12px);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(-12px);
+    opacity: 0.25;
+  }
+}
+.animate-weather-cloud-wisp {
+  animation: weather-cloud-drift-wisp 6.5s ease-in-out infinite;
+}
+
+@keyframes weather-raindrop-fall {
+  0% {
+    transform: translateY(-5px) scaleY(0.7);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(22px) scaleY(1.25);
+    opacity: 0;
+  }
+}
+.animate-weather-raindrop {
+  animation: weather-raindrop-fall 1.3s linear infinite;
+}
+
+@keyframes weather-sun-spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-weather-sun-spin {
+  animation: weather-sun-spin-slow 24s linear infinite;
+}
+
+@keyframes weather-sun-pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.85;
+  }
+}
+.animate-weather-sun-pulse {
+  animation: weather-sun-pulse-glow 3.2s ease-in-out infinite;
+}
+
+@keyframes weather-snowflake-sway {
+  0% {
+    transform: translateY(-5px) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(8px) translateX(3px) rotate(45deg);
+  }
+  100% {
+    transform: translateY(20px) translateX(-3px) rotate(90deg);
+    opacity: 0;
+  }
+}
+.animate-weather-snow-sway {
+  animation: weather-snowflake-sway 2.4s ease-in-out infinite;
+}
+
+@keyframes weather-lightning-flicker {
+  0%, 88%, 100% {
+    opacity: 0.15;
+    filter: drop-shadow(0 0 0 rgba(250, 204, 21, 0));
+  }
+  90%, 94% {
+    opacity: 1;
+    filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.95));
+  }
+  92% {
+    opacity: 0.4;
+  }
+}
+.animate-weather-lightning {
+  animation: weather-lightning-flicker 5.5s infinite ease-in-out;
+}
+
+@keyframes clock-glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.55);
+  }
+}
+
 .glass-card {
   position: relative;
   background: rgba(255,255,255,.055);

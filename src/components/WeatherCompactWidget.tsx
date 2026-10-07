@@ -5,6 +5,7 @@ import {
   Snowflake, CloudLightning, SunDim, Sparkles, Droplets
 } from 'lucide-react';
 import { WeatherBackgroundEffects } from './WeatherBackgroundEffects';
+import { AnimatedWeatherHeroIcon } from './AnimatedWeatherHeroIcon';
 
 interface HourlyForecastItem {
   time: string;
@@ -108,7 +109,7 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
     return (
       <div 
         onClick={onOpenFull}
-        className="relative w-full max-w-md mx-auto h-[220px] rounded-[28px] overflow-hidden bg-gradient-to-br from-slate-800/80 via-slate-900/90 to-indigo-950/80 border border-white/10 p-5 flex flex-col justify-between text-white/60 animate-pulse cursor-pointer shadow-xl"
+        className="relative w-full h-full min-h-[235px] rounded-[28px] overflow-hidden bg-gradient-to-br from-slate-800/80 via-slate-900/90 to-indigo-950/80 border border-white/10 p-5 flex flex-col justify-between text-white/60 animate-pulse cursor-pointer shadow-xl"
       >
         <div className="flex justify-between items-center">
           <div className="h-4 w-24 bg-white/10 rounded-md" />
@@ -174,7 +175,7 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
       whileTap={{ scale: 0.985 }}
       aria-label={`Weather for ${weather.city}: ${weather.temp} degrees, ${weather.desc}. Tap for full weather forecast`}
-      className="group relative w-full max-w-md mx-auto rounded-[28px] overflow-hidden cursor-pointer select-none border border-white/20 hover:border-white/35 transition-all shadow-[0_12px_40px_rgba(0,0,0,0.35)] hover:shadow-[0_16px_50px_rgba(0,0,0,0.45)] text-white"
+      className="group relative w-full h-full min-h-[235px] rounded-[28px] overflow-hidden cursor-pointer select-none border border-white/20 hover:border-white/35 transition-all shadow-[0_12px_40px_rgba(0,0,0,0.35)] hover:shadow-[0_16px_50px_rgba(0,0,0,0.45)] text-white"
     >
       {/* Background Dynamic Atmospheric Colors */}
       <div className={`absolute inset-0 bg-gradient-to-br ${getAtmosphereGradient()} opacity-90`} />
@@ -186,6 +187,35 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
         isWidget={true}
         isBoostEnabled={isPerformanceMode}
       />
+
+      {/* Subtle Ambient CSS Atmospheric Animations based on Current Condition */}
+      {/* 1. Gentle Rain Drop Streaks for Rain */}
+      {((weather.code >= 51 && weather.code <= 65) || (weather.code >= 80 && weather.code <= 82)) && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5] opacity-35" aria-hidden="true">
+          <span 
+            className="absolute top-2 right-16 w-[1.5px] h-6 rounded-full bg-cyan-200 animate-weather-raindrop" 
+            style={{ animationDelay: '0.2s', animationDuration: '1.2s' }} 
+          />
+          <span 
+            className="absolute top-8 right-28 w-[1px] h-5 rounded-full bg-sky-200 animate-weather-raindrop" 
+            style={{ animationDelay: '0.6s', animationDuration: '1.4s' }} 
+          />
+          <span 
+            className="absolute top-1 right-36 w-[1px] h-7 rounded-full bg-blue-200 animate-weather-raindrop" 
+            style={{ animationDelay: '0.9s', animationDuration: '1.1s' }} 
+          />
+        </div>
+      )}
+
+      {/* 2. Floating Cloud Mist Wisps for Cloudy/Overcast */}
+      {(weather.code === 2 || weather.code === 3 || weather.code === 45 || weather.code === 48) && (
+        <div className="absolute -top-4 -right-4 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none z-[5] animate-weather-cloud-float" aria-hidden="true" />
+      )}
+
+      {/* 3. Radiant Warm Glow for Sunny */}
+      {(weather.code === 0 || weather.code === 1) && (
+        <div className="absolute top-2 right-6 w-32 h-32 rounded-full bg-amber-400/15 blur-2xl pointer-events-none z-[5] animate-weather-sun-pulse" aria-hidden="true" />
+      )}
 
       {/* Widget Content Container */}
       <div className="relative z-10 p-5 flex flex-col justify-between min-h-[235px]">
@@ -220,11 +250,11 @@ export const WeatherCompactWidget: React.FC<WeatherCompactWidgetProps> = ({
             </div>
           </div>
 
-          {/* Hero Weather Icon with Ambient Glow */}
-          <div className="relative flex items-center justify-center p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-inner group-hover:scale-105 transition-transform">
+          {/* Hero Weather Icon with Ambient Dynamic Condition Animations */}
+          <div className="relative flex items-center justify-center p-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-inner group-hover:scale-105 transition-transform">
             <div className="absolute inset-0 rounded-2xl bg-white/20 blur-md opacity-40 pointer-events-none" />
-            <div className="relative z-10 scale-125">
-              {getMiniWeatherIcon(weather.code, 36)}
+            <div className="relative z-10">
+              <AnimatedWeatherHeroIcon code={weather.code} size={38} />
             </div>
           </div>
         </div>

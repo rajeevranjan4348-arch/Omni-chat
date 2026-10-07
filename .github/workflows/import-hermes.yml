@@ -1,0 +1,50 @@
+name: Import Hermes Agent
+
+on:
+  push:
+    paths-ignore:
+      - "hermes-agent/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-hermes:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Omni Chat
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Hermes Agent
+        uses: actions/checkout@v4
+        with:
+          repository: rajeevranjan4348-arch/hermes-agent
+          ref: main
+          path: .hermes-source
+          fetch-depth: 1
+
+      - name: Copy complete Hermes source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p hermes-agent
+          rsync -a --delete --exclude='.git/' .hermes-source/ hermes-agent/
+          rm -rf .hermes-source
+
+      - name: Commit imported Hermes source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hermes-agent
+          if git diff --cached --quiet; then
+            echo "Hermes source is already synchronized."
+            exit 0
+          fi
+          git commit -m "feat: import complete Hermes Agent source"
+          git push origin HEAD:main

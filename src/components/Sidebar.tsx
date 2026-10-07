@@ -128,6 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentMode, onModeChange }) =
       icon: <Library size={12} className="opacity-60" />,
       items: [
         { id: 'workspace', label: 'Workspace Desk', icon: <Library size={18} /> },
+        { id: 'library', label: 'Library', icon: <Library size={18} /> },
       ]
     }
   ];

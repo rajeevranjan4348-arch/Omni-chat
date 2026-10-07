@@ -9,6 +9,7 @@ import { AttachmentFile } from '../utils/attachmentSystem';
 import { OcrModal } from './OcrModal';
 import { ScreenStreamModal } from './ScreenStreamModal';
 import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
+import { addToLibrary } from '../services/libraryStore';
 
 const EMOJI_LIST = [
   '😊', '👍', '❤️', '🔥', '🎉', '✨', '🚀', '💡', '💯', '🙌', '👏', '🙏', 
@@ -113,6 +114,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
 
     setAttachments(prev => [...prev, ...newAttachments]);
+    await Promise.all(newAttachments.map(file =>
+      addToLibrary({ name: file.name, type: file.type, size: Math.round(file.base64.length * 0.75), base64: file.base64 })
+        .catch(error => console.error('[Library] Failed to store attachment:', error))
+    ));
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -209,6 +214,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       type: file.type,
       base64: file.base64
     }));
+    await Promise.all(formatted.map(file =>
+      addToLibrary({ name: file.name, type: file.type, size: Math.round(file.base64.length * 0.75), base64: file.base64 })
+        .catch(error => console.error('[Library] Failed to store selected attachment:', error))
+    ));
     setAttachments(prev => {
       const merged = [...prev];
       formatted.forEach(f => {

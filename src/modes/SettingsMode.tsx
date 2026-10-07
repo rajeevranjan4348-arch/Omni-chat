@@ -6,7 +6,7 @@ import {
   Palette, Sun, Moon, Mic, Volume2, Type, Sliders, Monitor, Zap, User, 
   Cpu, Brain, Sparkles, Key, Globe, Database, BookOpen, Plus, Trash2, 
   Download, Upload, Check, RotateCcw, HelpCircle, Code2, MessageSquare, 
-  Terminal, ShieldCheck, Layers, FileText
+  Terminal, ShieldCheck, Layers, FileText, Image as ImageIcon
 } from 'lucide-react';
 
 export const SettingsMode: React.FC = () => {
@@ -28,7 +28,7 @@ export const SettingsMode: React.FC = () => {
   } = useSettings();
 
   // Navigation tab state inside Settings
-  const [activeTab, setActiveTab] = useState<'llm' | 'memory' | 'prompts' | 'appearance' | 'audio' | 'profile'>('llm');
+  const [activeTab, setActiveTab] = useState<'llm' | 'memory' | 'prompts' | 'appearance' | 'wallpaper' | 'audio' | 'profile'>('llm');
 
   // Local state for new memory & new prompt preset
   const [newMemoryInput, setNewMemoryInput] = useState('');
@@ -248,6 +248,18 @@ export const SettingsMode: React.FC = () => {
           >
             <Palette size={16} />
             <span>Appearance & Theme</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('wallpaper')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer shrink-0 ${
+              activeTab === 'wallpaper'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <ImageIcon size={16} />
+            <span>Wallpaper</span>
           </button>
 
           <button
@@ -851,6 +863,131 @@ export const SettingsMode: React.FC = () => {
 
                 <div className={`h-px w-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`} />
 
+                {/* Performance / Graphics Mode */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium">Premium Animation Engine</h3>
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                      Toggle ultra-high frame rate physics, blurs, and global particle dynamics.
+                    </p>
+                  </div>
+                  <div className={`flex p-1 rounded-lg border ${getBorderClass()} ${isDarkMode ? 'bg-black/40' : 'bg-slate-100'}`}>
+                    <button
+                      onClick={() => {
+                        setPerformanceMode(false);
+                        effects.setPerformanceMode('low-end');
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${effects.performanceMode === 'low-end' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                    >
+                      Standard
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPerformanceMode(true);
+                        effects.setPerformanceMode('ultra');
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${effects.performanceMode === 'ultra' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400'}`}
+                    >
+                      Ultra 120Hz
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`h-px w-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`} />
+
+                {/* Sound Effects Toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium">Interface Audio Feedback</h3>
+                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                      Chimes & haptic auditory responses for key system events.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => effects.setSoundEnabled(!effects.soundEnabled)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      effects.soundEnabled ? 'bg-emerald-500' : isDarkMode ? 'bg-white/10' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        effects.soundEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className={`h-px w-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`} />
+
+                {/* Accent Color */}
+                <div>
+                  <h3 className="font-medium mb-3">Accent Color</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {colors.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setColor(c.id)}
+                        className={`group relative w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${c.class}`}
+                        title={c.label}
+                      >
+                        {color === c.id && (
+                          <div className="absolute inset-0 rounded-full border-2 border-white dark:border-slate-900 scale-90" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Typography Section */}
+            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
+                  <Type size={20} className={getAccentClass()} />
+                </div>
+                <h2 className="text-xl font-semibold">Typography Engine</h2>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                {fonts.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFont(f.id)}
+                    className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      font === f.id 
+                        ? `border-${color}-500 ${isDarkMode ? 'bg-white/5' : 'bg-slate-50'}` 
+                        : `${getBorderClass()} hover:border-slate-400 dark:hover:border-slate-600`
+                    }`}
+                  >
+                    <span className={`font-semibold text-base ${f.id === 'sans' ? 'font-sans' : f.id === 'mono' ? 'font-mono' : f.id === 'serif' ? 'font-serif' : f.id === 'display' ? 'font-display' : 'font-handwriting'}`}>
+                      {f.label}
+                    </span>
+                    <span className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                      {f.desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* TAB: BACKGROUND WALLPAPER */}
+        {activeTab === 'wallpaper' && (
+          <div className="space-y-8 animate-in fade-in-50 duration-200">
+            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
+                  <ImageIcon size={20} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Background Wallpaper</h2>
+                  <p className={`text-xs ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                    Personalize the background without changing the existing Omni-chat interface.
+                  </p>
+                </div>
+              </div>
                 {/* Background Wallpaper */}
                 <div className={`space-y-4 rounded-2xl border p-4 ${isDarkMode ? 'border-white/10 bg-white/[0.03]' : 'border-slate-200 bg-slate-50'}`}>
                   <div className="flex items-start justify-between gap-4">
@@ -961,112 +1098,7 @@ export const SettingsMode: React.FC = () => {
                   />
                 </div>
 
-                {/* Performance / Graphics Mode */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">Premium Animation Engine</h3>
-                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
-                      Toggle ultra-high frame rate physics, blurs, and global particle dynamics.
-                    </p>
-                  </div>
-                  <div className={`flex p-1 rounded-lg border ${getBorderClass()} ${isDarkMode ? 'bg-black/40' : 'bg-slate-100'}`}>
-                    <button
-                      onClick={() => {
-                        setPerformanceMode(false);
-                        effects.setPerformanceMode('low-end');
-                      }}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${effects.performanceMode === 'low-end' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
-                    >
-                      Standard
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPerformanceMode(true);
-                        effects.setPerformanceMode('ultra');
-                      }}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${effects.performanceMode === 'ultra' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400'}`}
-                    >
-                      Ultra 120Hz
-                    </button>
-                  </div>
-                </div>
 
-                <div className={`h-px w-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`} />
-
-                {/* Sound Effects Toggle */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">Interface Audio Feedback</h3>
-                    <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
-                      Chimes & haptic auditory responses for key system events.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => effects.setSoundEnabled(!effects.soundEnabled)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      effects.soundEnabled ? 'bg-emerald-500' : isDarkMode ? 'bg-white/10' : 'bg-slate-200'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        effects.soundEnabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className={`h-px w-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`} />
-
-                {/* Accent Color */}
-                <div>
-                  <h3 className="font-medium mb-3">Accent Color</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {colors.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => setColor(c.id)}
-                        className={`group relative w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${c.class}`}
-                        title={c.label}
-                      >
-                        {color === c.id && (
-                          <div className="absolute inset-0 rounded-full border-2 border-white dark:border-slate-900 scale-90" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Typography Section */}
-            <section className={`p-6 rounded-2xl border ${getBorderClass()} ${isDarkMode ? 'bg-black/20' : 'bg-white shadow-sm'}`}>
-              <div className="flex items-center gap-3 mb-6">
-                <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
-                  <Type size={20} className={getAccentClass()} />
-                </div>
-                <h2 className="text-xl font-semibold">Typography Engine</h2>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                {fonts.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => setFont(f.id)}
-                    className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      font === f.id 
-                        ? `border-${color}-500 ${isDarkMode ? 'bg-white/5' : 'bg-slate-50'}` 
-                        : `${getBorderClass()} hover:border-slate-400 dark:hover:border-slate-600`
-                    }`}
-                  >
-                    <span className={`font-semibold text-base ${f.id === 'sans' ? 'font-sans' : f.id === 'mono' ? 'font-mono' : f.id === 'serif' ? 'font-serif' : f.id === 'display' ? 'font-display' : 'font-handwriting'}`}>
-                      {f.label}
-                    </span>
-                    <span className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
-                      {f.desc}
-                    </span>
-                  </button>
-                ))}
-              </div>
             </section>
           </div>
         )}

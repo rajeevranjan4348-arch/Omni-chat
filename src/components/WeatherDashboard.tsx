@@ -763,74 +763,83 @@ JSON Example:
 
   return (
     <div className="w-full">
-      {/* 1. COMPACT WIDGET VIEW */}
-      <div 
+      {/* 1. COMPACT WEATHER WIDGET — intentionally simple and glanceable. */}
+      <motion.div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsExpanded(true)}
-        className="dash-card p-5 glow-cyan cursor-pointer group relative overflow-hidden flex flex-col justify-between h-[190px] border border-white/10 hover:border-cyan-500/40"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsExpanded(true);
+          }
+        }}
+        whileTap={{ scale: 0.995 }}
+        className="dash-card relative h-[220px] overflow-hidden rounded-[24px] cursor-pointer group border border-white/10 hover:border-white/20"
+        aria-label="Open full weather information"
       >
-        {/* Animated Background particle layers based on weather */}
         {weather && (
-          <WeatherBackgroundEffects code={weather.code} isWidget={true} isBoostEnabled={isPerformanceMode} />
+          <div className="absolute inset-0 pointer-events-none">
+            <div className={`absolute inset-0 bg-gradient-to-br ${activeWeatherInfo?.bgClass || 'from-slate-500 to-slate-800'} opacity-80`} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/25" />
+            <WeatherBackgroundEffects
+              code={weather.code}
+              isWidget={true}
+              isBoostEnabled={isPerformanceMode}
+            />
+          </div>
         )}
 
         {weatherLoading ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 py-4">
-            <RefreshCw size={24} className="text-cyan-400 animate-spin" />
-            <span className="text-white/40 text-xs">Synchronizing live radar...</span>
+          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2">
+            <RefreshCw size={22} className="text-white/80 animate-spin" />
+            <span className="text-white/65 text-xs">Updating weather…</span>
           </div>
         ) : weather ? (
-          <>
-            <div className="flex items-start justify-between relative z-10">
+          <div className="relative z-10 flex h-full flex-col justify-between p-5 text-white">
+            <div className="flex items-start justify-between">
               <div className="min-w-0">
-                <div className="text-white/50 text-[10px] uppercase tracking-widest font-semibold flex items-center gap-1.5">
-                  <Navigation size={10} className="text-cyan-400 animate-pulse" /> {weather.city}
+                <div className="flex items-center gap-1.5 text-[13px] font-medium text-white/85">
+                  <Navigation size={14} className="shrink-0" />
+                  <span className="truncate">{weather.city}</span>
                 </div>
-                <div className="text-4xl md:text-5xl font-extrabold text-white mt-1 tracking-tight">
-                  {weather.temp}°<span className="text-2xl font-medium text-white/50">C</span>
+                <div className="mt-2 text-[58px] leading-none font-light tracking-[-0.05em]">
+                  {weather.temp}°
                 </div>
-                <p className="text-white/70 text-xs font-semibold mt-1 tracking-wide">{weather.desc}</p>
+                <div className="mt-2 text-[18px] font-medium text-white/90">
+                  {weather.desc}
+                </div>
               </div>
 
-              {/* Dynamic animated icon */}
-              <div className="p-2 rounded-2xl bg-white/5 border border-white/5 shadow-inner scale-105 group-hover:scale-115 transition-transform duration-300">
+              <div className="shrink-0 rounded-2xl bg-white/10 p-2.5 backdrop-blur-sm">
                 {activeWeatherInfo?.icon}
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-2 relative z-10">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1">
-                  <Thermometer size={12} className="text-amber-400" />
-                  <span className="text-xs text-white/70 font-mono">{weather.feelsLike}°</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Droplets size={12} className="text-blue-400" />
-                  <span className="text-xs text-white/70 font-mono">{weather.humidity}%</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Wind size={12} className="text-cyan-400" />
-                  <span className="text-xs text-white/70 font-mono">{weather.windSpeed}k/h</span>
-                </div>
+            <div className="flex items-end justify-between gap-3">
+              <div className="text-[14px] font-medium text-white/75">
+                {weather.daily[0]?.tempMin ?? Math.round(weather.temp - 5)}° / {weather.daily[0]?.tempMax ?? Math.round(weather.temp + 2)}°
               </div>
-              
-              <span className="text-[10px] text-cyan-400/80 uppercase font-bold tracking-widest group-hover:text-cyan-300 flex items-center gap-0.5">
-                Dashboard <ChevronRight size={10} />
-              </span>
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                More <ChevronRight size={12} />
+              </div>
             </div>
-          </>
+          </div>
         ) : (
-          <div className="text-white/40 text-sm text-center py-12">Weather information unavailable</div>
+          <div className="relative z-10 flex h-full items-center justify-center text-white/50 text-sm">
+            Weather information unavailable
+          </div>
         )}
-      </div>
+      </motion.div>
 
       {/* 2. FULLSCREEN INTERACTIVE WEATHER DASHBOARD */}
       <AnimatePresence>
         {isExpanded && weather && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.99 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+            exit={{ opacity: 0, scale: 0.99 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
             className={`fixed inset-0 z-50 overflow-y-auto ${
               localTheme === 'glass-dark' 
                 ? 'bg-slate-950/95 text-white' 

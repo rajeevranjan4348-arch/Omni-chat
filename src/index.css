@@ -140,59 +140,70 @@
 
 .glass-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 24px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.25),
-    inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.065);
+  backdrop-filter: blur(16px) saturate(155%);
+  -webkit-backdrop-filter: blur(16px) saturate(155%);
+  border: 1px solid rgba(255, 255, 255, 0.115);
+  border-radius: 22px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: transform 180ms cubic-bezier(.2,.8,.2,1), border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .glass-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(255,255,255,0.18),
-    rgba(255,255,255,0.04)
-  );
+  background: linear-gradient(135deg, rgba(255,255,255,0.075), transparent 55%);
   pointer-events: none;
 }
 
 .glass-card:hover {
-  transform: translateY(-4px) scale(1.02);
-  border-color: rgba(255,255,255,0.3);
-  box-shadow:
-    0 12px 40px rgba(0,0,0,0.35),
-    inset 0 1px 2px rgba(255,255,255,0.3);
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.18);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.075);
 }
 
 /* Glass Button */
-
 .glass-button {
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 16px;
+  background: rgba(255,255,255,0.085);
+  backdrop-filter: blur(12px) saturate(145%);
+  -webkit-backdrop-filter: blur(12px) saturate(145%);
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 14px;
   color: white;
-  padding: 14px 20px;
+  padding: 12px 18px;
   cursor: pointer;
-  transition: all .25s ease;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
 }
 
 .glass-button:hover {
-  background: rgba(255,255,255,0.2);
-  transform: scale(1.05);
+  background: rgba(255,255,255,0.13);
+  border-color: rgba(255,255,255,0.19);
+  transform: translateY(-1px);
 }
 
 .glass-button:active {
-  transform: scale(0.96);
+  transform: translateY(0) scale(0.98);
+}
+
+.glass-button:focus-visible,
+.glass-input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.72);
+  outline-offset: 2px;
+}
+
+/* Consistent interaction polish without changing component structure. */
+button, [role="button"], a, input, textarea, select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(125, 211, 252, 0.22);
+  color: inherit;
 }
 
 /* =====================================

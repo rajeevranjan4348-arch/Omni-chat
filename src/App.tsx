@@ -15,6 +15,7 @@ import { OmniChatMode } from './modes/OmniChatMode';
 import { DashboardMode } from './modes/DashboardMode';
 import { ImageGenerationMode } from './modes/ImageGenerationMode';
 import { WorkspaceMode } from './modes/WorkspaceMode';
+import { LibraryMode } from './modes/LibraryMode';
 import { CommandPalette } from './components/CommandPalette';
 import { Menu, X, Volume2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -44,6 +45,7 @@ const MODE_LABELS: Record<string, string> = {
   coder: 'AI Coder',
   workspace: 'Workspace Central',
   settings: 'Settings',
+  library: 'Library',
 };
 
 const VALID_MODES: AppMode[] = [
@@ -59,7 +61,8 @@ const VALID_MODES: AppMode[] = [
   'image-gen',
   'coder',
   'workspace',
-  'settings'
+  'settings',
+  'library'
 ];
 
 export default function App() {
@@ -225,6 +228,8 @@ export default function App() {
         return <WorkspaceMode />;
       case 'settings':
         return <SettingsMode />;
+      case 'library':
+        return <LibraryMode />;
       default:
         return <DashboardMode onModeChange={handleModeChange} />;
     }

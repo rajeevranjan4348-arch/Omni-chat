@@ -10,6 +10,8 @@ interface ThemeContextType {
   setColor: (c: ThemeColor) => void;
   setFont: (f: ThemeFont) => void;
   setIsDarkMode: (d: boolean) => void;
+  wallpaper: string | null;
+  setWallpaper: (wallpaper: string | null) => void;
   getBgClass: () => string;
   getSidebarClass: () => string;
   getAccentClass: () => string;
@@ -23,6 +25,23 @@ export const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children 
   const [color, setColor] = useState<ThemeColor>('slate');
   const [font, setFont] = useState<ThemeFont>('sans');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [wallpaper, setWallpaperState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('omnichat_wallpaper') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setWallpaper = (nextWallpaper: string | null) => {
+    setWallpaperState(nextWallpaper);
+    try {
+      if (nextWallpaper) localStorage.setItem('omnichat_wallpaper', nextWallpaper);
+      else localStorage.removeItem('omnichat_wallpaper');
+    } catch (error) {
+      console.warn('[Wallpaper] Could not persist wallpaper:', error);
+    }
+  };
 
   const getBgClass = () => {
     if (!isDarkMode) {
@@ -160,9 +179,25 @@ export const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children 
   };
 
   return (
-    <ThemeContext.Provider value={{ color, font, isDarkMode, setColor, setFont, setIsDarkMode, getBgClass, getSidebarClass, getAccentClass, getTextClass, getBorderClass }}>
-      <div className={`h-full w-full ${getFontClass()} ${getBgClass()} ${getTextClass()}`}>
-        {children}
+    <ThemeContext.Provider value={{ color, font, isDarkMode, setColor, setFont, setIsDarkMode, wallpaper, setWallpaper, getBgClass, getSidebarClass, getAccentClass, getTextClass, getBorderClass }}>
+      <div
+        className={`h-full w-full ${getFontClass()} ${getBgClass()} ${getTextClass()} relative overflow-hidden`}
+        style={wallpaper ? {
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.34), rgba(0,0,0,0.42)), url("${wallpaper}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        } : undefined}
+      >
+        {wallpaper && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none bg-black/10 backdrop-blur-[1px]"
+          />
+        )}
+        <div className="relative z-10 h-full w-full">
+          {children}
+        </div>
       </div>
     </ThemeContext.Provider>
   );

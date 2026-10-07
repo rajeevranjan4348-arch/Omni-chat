@@ -1,5 +1,6 @@
 import { GoogleGenAI, ThinkingLevel, Modality } from "@google/genai";
 import { executeAiWithTransientRetry, isTransientNetworkError } from "../hooks/useGlobalAiErrorListener";
+import { attachOmniPolicy } from "./assistantPolicy";
 
 const wrapAiWithFallback = (aiInstance: any) => {
   const isQuotaOrPermissionError = (err: any) => {
@@ -52,7 +53,7 @@ const wrapAiWithFallback = (aiInstance: any) => {
               return async function(params: any) {
                 return executeAiWithTransientRetry(async () => {
                   try {
-                    return await modelsTarget.generateContent(params);
+                    return await modelsTarget.generateContent({ ...params, config: attachOmniPolicy(params?.config) });
                   } catch (err) {
                     if (isQuotaOrPermissionError(err)) {
                       const originalModel = params?.model || '';
@@ -61,7 +62,7 @@ const wrapAiWithFallback = (aiInstance: any) => {
                       const fallbackParams = {
                         ...params,
                         model: fallbackModel,
-                        config: adjustConfigForFallback(params?.config)
+                        config: attachOmniPolicy(adjustConfigForFallback(params?.config))
                       };
                       try {
                         return await modelsTarget.generateContent(fallbackParams);
@@ -79,7 +80,7 @@ const wrapAiWithFallback = (aiInstance: any) => {
             if (modelsProp === 'generateContentStream') {
               return async function*(params: any) {
                 try {
-                  const stream = await modelsTarget.generateContentStream(params);
+                  const stream = await modelsTarget.generateContentStream({ ...params, config: attachOmniPolicy(params?.config) });
                   for await (const chunk of stream) {
                     yield chunk;
                   }
@@ -94,7 +95,7 @@ const wrapAiWithFallback = (aiInstance: any) => {
                       config: adjustConfigForFallback(params?.config)
                     };
                     try {
-                      const fallbackStream = await modelsTarget.generateContentStream(fallbackParams);
+                      const fallbackStream = await modelsTarget.generateContentStream({ ...fallbackParams, config: attachOmniPolicy(fallbackParams?.config) });
                       for await (const chunk of fallbackStream) {
                         yield chunk;
                       }
@@ -124,7 +125,7 @@ const wrapAiWithFallback = (aiInstance: any) => {
           get(chatsTarget, chatsProp) {
             if (chatsProp === 'create') {
               return function(createParams: any) {
-                const originalChat = chatsTarget.create(createParams);
+                const originalChat = chatsTarget.create({ ...createParams, config: attachOmniPolicy(createParams?.config) });
                 
                 return new Proxy(originalChat, {
                   get(chatTarget, chatProp) {
@@ -143,7 +144,7 @@ const wrapAiWithFallback = (aiInstance: any) => {
                               model: fallbackModel,
                               config: adjustConfigForFallback(createParams?.config)
                             };
-                            const fallbackChat = chatsTarget.create(fallbackChatParams);
+                            const fallbackChat = chatsTarget.create({ ...fallbackChatParams, config: attachOmniPolicy(fallbackChatParams?.config) });
                             try {
                               return await fallbackChat.sendMessage(sendParams);
                             } catch (fallbackErr) {
@@ -233,9 +234,9 @@ export const getSearchGroundedResponse = async (message: string) => {
   return await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: message,
-    config: {
+    config: attachOmniPolicy({
       tools: [{ googleSearch: {} }],
-    },
+    }),
   });
 };
 
@@ -244,7 +245,7 @@ export const getMapsGroundedResponse = async (message: string, lat: number, lng:
   return await ai.models.generateContent({
     model: "gemini-3.5-flash",
     contents: message,
-    config: {
+    config: attachOmniPolicy({
       tools: [{ googleMaps: {} }],
       toolConfig: {
         retrievalConfig: {
@@ -254,7 +255,7 @@ export const getMapsGroundedResponse = async (message: string, lat: number, lng:
           },
         },
       },
-    },
+    }),
   });
 };
 

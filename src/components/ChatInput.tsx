@@ -208,7 +208,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleBottomSheetSelect = (selectedFiles: AttachmentFile[]) => {
+  const handleBottomSheetSelect = async (selectedFiles: AttachmentFile[]) => {
     const formatted: Attachment[] = selectedFiles.map(file => ({
       name: file.name,
       type: file.type,

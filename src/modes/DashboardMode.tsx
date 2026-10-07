@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { WeatherDashboard } from '../components/WeatherDashboard';
 import { PremiumCard, PremiumButton, ShimmerLoading } from '../components/PremiumEffects';
 import { DashboardClockWidget } from '../components/DashboardClockWidget';
@@ -61,6 +62,7 @@ const AI_MODELS = [
 
 export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
   const { userProfile } = useSettings();
+  const { wallpaper } = useTheme();
   const [now, setNow] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   // Modals for Secret Vault and Frequent Voice Commands
@@ -82,14 +84,14 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
-    <div className="h-full overflow-y-auto bg-[#0a0a0f] text-white relative">
+    <div className={`h-full overflow-y-auto text-white relative ${wallpaper ? "bg-transparent" : "bg-[#0a0a0f]"}`}>
       {/* Lord Krishna Divine Background Image Layer */}
       <div 
-        className="fixed inset-0 pointer-events-none z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-700 opacity-35"
+        className={`fixed inset-0 pointer-events-none z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-700 ${wallpaper ? "hidden" : "opacity-35"}`}
         style={{ backgroundImage: `url(${KRISHNA_BACKGROUND_IMAGE})` }}
       />
       {/* Dark Gradient Overlay for High Contrast Legibility */}
-      <div className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-b from-[#0a0a0f]/85 via-[#0a0a0f]/65 to-[#0a0a0f]/90 backdrop-blur-[2px]" />
+      <div className={`fixed inset-0 pointer-events-none z-0 bg-gradient-to-b from-[#0a0a0f]/85 via-[#0a0a0f]/65 to-[#0a0a0f]/90 backdrop-blur-[2px] ${wallpaper ? "hidden" : ""}`} />
 
       <style>{`
         .dash-card {

@@ -1071,7 +1071,7 @@ export const VoiceMode: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider">Voice History</h3>
-                    <span className="text-[10px] opacity-60">Voice Type • Live Calls</span>
+                    <span className="text-[10px] opacity-60">Live Calls</span>
                   </div>
                 </div>
                 <button
@@ -1114,10 +1114,9 @@ export const VoiceMode: React.FC = () => {
                 )}
               </div>
 
-              {/* Sessions Counter and Tag */}
+              {/* Sessions Counter */}
               <div className="flex items-center justify-between px-1 mb-2 shrink-0 text-[10px] opacity-60 font-medium">
                 <span>{filteredSessions.length} voice {filteredSessions.length === 1 ? 'call' : 'calls'} saved</span>
-                <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono text-[9px]">Voice Type</span>
               </div>
 
               {/* Voice Sessions List */}
@@ -1264,9 +1263,6 @@ export const VoiceMode: React.FC = () => {
                 <span className="text-sm font-bold truncate">
                   {currentSession?.title || 'Live Voice Conversation'}
                 </span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/20 shrink-0">
-                  Voice Type
-                </span>
               </div>
               
               <div className="flex items-center gap-2 text-[10px] opacity-60">
@@ -1386,17 +1382,17 @@ export const VoiceMode: React.FC = () => {
           </div>
         </div>
 
-        {/* Audio Recording Player Bar (if current session has encrypted audio in IndexedDB) */}
+        {/* Audio Recording Player Bar */}
         {currentSession?.hasRecording && (
-          <div className={`px-4 py-2.5 border-b flex items-center justify-between shrink-0 text-xs gap-3 ${
-            isDarkMode ? 'bg-blue-950/20 border-blue-500/20 text-blue-200' : 'bg-blue-50 border-blue-200 text-blue-800'
+          <div className={`px-4 py-2 border-b flex items-center justify-between shrink-0 text-xs gap-3 ${
+            isDarkMode ? 'bg-black/20 border-white/10 text-blue-200' : 'bg-slate-50 border-slate-200 text-blue-800'
           }`}>
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => handlePlayRecording(currentSession.id)}
                 disabled={isLoadingAudio}
-                className="p-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-sm shrink-0 transition-all flex items-center justify-center disabled:opacity-50"
+                className="p-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-sm shrink-0 transition-all flex items-center justify-center disabled:opacity-50"
                 title={playingAudioId === currentSession.id ? "Pause Audio" : "Play Recorded Voice Audio"}
               >
                 {isLoadingAudio ? (
@@ -1408,15 +1404,9 @@ export const VoiceMode: React.FC = () => {
                 )}
               </button>
               
-              <div className="flex flex-col min-w-0">
-                <span className="font-semibold text-xs flex items-center gap-1.5">
-                  <Shield size={12} className="text-emerald-400" />
-                  Dual-Track Encrypted Voice Recording
-                </span>
-                <span className="text-[10px] opacity-70">
-                  Stereo recording (Mic & Gemini audio) stored in local secure vault
-                </span>
-              </div>
+              <span className="font-semibold text-xs opacity-80">
+                Voice Call Recording
+              </span>
             </div>
 
             {audioBlobUrl && playingAudioId === currentSession.id && (

@@ -13,6 +13,12 @@ import { useAutoSaveDraft } from '../hooks/useAutoSaveDraft';
 import { usePeriodicAutoSave } from '../hooks/usePeriodicAutoSave';
 import { buildLearningContext, extractExplicitLearning, mergeLearnedMemory } from '../services/aiLearning';
 import { buildJarvisSystemInstruction, classifyJarvisCommand, getJarvisCapabilitySummary } from '../services/jarvisCore';
+import { VoiceChatWidget } from '../components/spaceui/voice-chat-widget';
+import { 
+  loadPersistentChatHistory, 
+  persistChatHistory, 
+  deleteConversationFromIDB 
+} from '../utils/chatHistoryDB';
 
 /* ─── Keyframe animations ─────────────────────────────── */
 const STYLES = `
@@ -255,6 +261,27 @@ export const OmniChatMode: React.FC = () => {
     localStorage.setItem('omnichat_selected_model_omni', selectedModel);
   }, [selectedModel]);
 
+  // Load complete persistent chat history from IndexedDB / LocalStorage on mount
+  useEffect(() => {
+    loadPersistentChatHistory().then(({ threads, activeId }) => {
+      if (threads && threads.length > 0) {
+        setConversations(threads as Conversation[]);
+        if (activeId && threads.some(t => t.id === activeId)) {
+          setCurrentConversationId(activeId);
+        }
+      }
+    }).catch(err => {
+      console.warn('[OmniChatMode] Initial IndexedDB load notice:', err);
+    });
+  }, []);
+
+  // Sync state changes directly to IndexedDB & LocalStorage
+  useEffect(() => {
+    if (conversations.length > 0) {
+      persistChatHistory(conversations as any, currentConversationId).catch(() => {});
+    }
+  }, [conversations, currentConversationId]);
+
   // Handle + New Chat event from Sidebar
   useEffect(() => {
     const handleNewChat = () => {
@@ -434,6 +461,7 @@ export const OmniChatMode: React.FC = () => {
   const deleteConversation = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Delete this conversation?')) {
+      deleteConversationFromIDB(id).catch(() => {});
       const remaining = conversations.filter(c => c.id !== id);
       if (remaining.length === 0) {
         const defaultConv = { id: '1', title: 'New Chat', messages: [], updatedAt: Date.now() };
@@ -708,10 +736,6 @@ export const OmniChatMode: React.FC = () => {
               <OmniAvatar size="sm" />
               <div>
                 <p className="text-sm font-semibold leading-none tracking-wide">Omni</p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" style={{ animation: 'omni-glow 2s ease-in-out infinite' }} />
-                  <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Powered by Gemini</p>
-                </div>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -878,16 +902,9 @@ export const OmniChatMode: React.FC = () => {
                       {msg.role === 'model' ? (
                         <>
                           {msg.streaming && !msg.text ? (
-                            <span className="inline-flex gap-1.5 items-center py-1">
-                              {[0, 1, 2].map(i => (
-                                <span key={i} style={{
-                                  width: 7, height: 7, borderRadius: '50%',
-                                  background: 'rgba(139,92,246,0.7)',
-                                  display: 'inline-block',
-                                  animation: `omni-typing-dot 1.2s ${i * 0.2}s ease-in-out infinite`,
-                                }} />
-                              ))}
-                            </span>
+                            <div className="py-1">
+                              <VoiceChatWidget variant="compact" statusText="Omni is thinking..." isThinking />
+                            </div>
                           ) : (
                             <div className="prose prose-invert prose-sm max-w-none prose-p:my-1.5 prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10 prose-code:text-violet-300 prose-code:bg-violet-950/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-headings:text-white prose-headings:font-semibold">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
@@ -976,6 +993,24 @@ export const OmniChatMode: React.FC = () => {
                     </div>
                   </motion.div>
                 ))}
+
+                {isLoading && !messages.some(m => m.streaming) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex justify-start mb-6"
+                  >
+                    <div className="flex items-start gap-3 max-w-[85%] sm:max-w-[80%]">
+                      <div className="shrink-0 mt-0.5">
+                        <OmniAvatar size="sm" />
+                      </div>
+                      <div className="rounded-2xl p-1 bg-white/5 border border-white/10 backdrop-blur-md">
+                        <VoiceChatWidget variant="compact" statusText="Omni is processing request..." isThinking />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div ref={bottomRef} />
               </div>
             )}

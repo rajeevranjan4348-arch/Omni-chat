@@ -176,11 +176,9 @@ export const DashboardMode: React.FC<DashboardProps> = ({ onModeChange }) => {
           </form>
         </motion.div>
 
-        {/* Weather */}
-        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-          {/* Weather Card */}
-          <div className="md:col-span-1">
+        {/* Weather Widget */}
+        <motion.div variants={itemVariants} className="w-full flex justify-center">
+          <div className="w-full max-w-md">
             <WeatherDashboard />
           </div>
         </motion.div>

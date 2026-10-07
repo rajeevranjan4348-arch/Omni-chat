@@ -81,6 +81,8 @@ export const VoiceMode: React.FC = () => {
   });
 
   const [showHistory, setShowHistory] = useState(true);
+  // Voice opens on a dedicated history landing screen. The full live-call UI is shown only after a session is selected or a new call is created.
+  const [showHistoryLanding, setShowHistoryLanding] = useState(true);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitleText, setEditingTitleText] = useState('');
@@ -397,7 +399,6 @@ export const VoiceMode: React.FC = () => {
 
       const width = rect.width;
       const height = rect.height;
-
       // Draw background
       ctx.clearRect(0, 0, width, height);
 
@@ -600,6 +601,7 @@ export const VoiceMode: React.FC = () => {
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
     setInteractionHistory([]);
+    setShowHistoryLanding(false);
     loadedSessionIdRef.current = newSession.id;
   };
 
@@ -798,7 +800,6 @@ export const VoiceMode: React.FC = () => {
       const fullTranscript = interactionHistory
         .map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`)
         .join('\n\n');
-
       const updatedSess = { 
         status: 'Completed' as const, 
         duration: formatted,
@@ -1046,6 +1047,134 @@ export const VoiceMode: React.FC = () => {
     };
   }, []);
 
+  if (showHistoryLanding) {
+    return (
+      <div className={`flex h-full w-full flex-col overflow-hidden ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
+        <div className={`flex items-center justify-between gap-4 px-5 py-4 border-b shrink-0 ${isDarkMode ? 'border-white/10 bg-slate-900/70' : 'border-slate-200 bg-white'}`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+              <History size={19} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold truncate">Voice History</h1>
+              <p className="text-[11px] opacity-55">Choose a previous voice conversation or start a new call.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={createNewSession}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-all shrink-0"
+          >
+            <Plus size={14} /> New Call
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="relative mb-4">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+              <input
+                type="text"
+                value={historySearchQuery}
+                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                placeholder="Search voice history..."
+                className={`w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border outline-none transition-all ${isDarkMode ? 'bg-white/5 border-white/10 text-white placeholder-white/30 focus:border-blue-500' : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-blue-500'}`}
+              />
+            </div>
+
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-[11px] font-semibold opacity-55">
+                {filteredSessions.length} saved {filteredSessions.length === 1 ? 'conversation' : 'conversations'}
+              </span>
+              <span className="text-[10px] opacity-40">Voice Live</span>
+            </div>
+
+            {filteredSessions.length === 0 ? (
+              <div className={`min-h-[280px] rounded-2xl border flex flex-col items-center justify-center text-center p-6 ${isDarkMode ? 'bg-white/[0.03] border-white/10' : 'bg-white border-slate-200'}`}>
+                <div className="p-4 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-3">
+                  <Mic size={28} />
+                </div>
+                <h2 className="text-sm font-bold mb-1">No voice conversations yet</h2>
+                <p className="text-xs opacity-55 max-w-sm mb-5">Start a new voice call to create your first voice conversation history.</p>
+                <button
+                  type="button"
+                  onClick={createNewSession}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 transition-all"
+                >
+                  <Phone size={14} /> Start New Call
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {filteredSessions.map((s) => {
+                  const turnCount = s.messages?.length || (s.transcript ? s.transcript.split('\\n\\n').length : 0);
+                  const lastMsg = s.messages && s.messages.length > 0
+                    ? s.messages[s.messages.length - 1].text
+                    : (s.transcript ? s.transcript.slice(-120) : '');
+
+                  return (
+                    <div
+                      key={s.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setCurrentSessionId(s.id);
+                        setInteractionHistory(s.messages || []);
+                        loadedSessionIdRef.current = s.id;
+                        setShowHistoryLanding(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setCurrentSessionId(s.id);
+                          setInteractionHistory(s.messages || []);
+                          loadedSessionIdRef.current = s.id;
+                          setShowHistoryLanding(false);
+                        }
+                      }}
+                      className={`group rounded-2xl border p-4 cursor-pointer transition-all hover:-translate-y-0.5 ${isDarkMode ? 'bg-white/[0.04] border-white/10 hover:bg-white/[0.07] hover:border-blue-500/30' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+                            {s.status === 'Connected' ? <Phone size={15} /> : <Mic size={15} />}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-bold truncate">{s.title}</h3>
+                            <p className="text-[10px] opacity-45 mt-0.5">{s.updatedAt.toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => deleteSession(s.id, e)}
+                          className="p-1.5 rounded-lg text-red-400/60 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Delete conversation"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3 mt-4 text-[10px] opacity-55">
+                        <span className="flex items-center gap-1"><Clock size={10} /> {s.duration !== '--' ? s.duration : 'Not started'}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1"><MessageSquare size={10} /> {turnCount} {turnCount === 1 ? 'turn' : 'turns'}</span>
+                        {s.hasRecording && <span className="text-emerald-400 flex items-center gap-1"><Shield size={10} /> Audio</span>}
+                      </div>
+
+                      {lastMsg && (
+                        <p className="mt-2.5 text-[10px] opacity-45 truncate">{lastMsg}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex h-full w-full relative overflow-hidden ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
       
@@ -1197,8 +1326,7 @@ export const VoiceMode: React.FC = () => {
                             >
                               <Edit2 size={11} />
                             </button>
-                            <button
-                              type="button"
+                            <button                              type="button"
                               onClick={(e) => deleteSession(s.id, e)}
                               className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500 transition-all"
                               title="Delete Call"
@@ -1597,8 +1725,7 @@ export const VoiceMode: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Clock size={13} className="opacity-60" />
-                      <span>Duration: {currentSession.duration !== '--' ? currentSession.duration : 'Not Started'}</span>
-                    </div>
+                      <span>Duration: {currentSession.duration !== '--' ? currentSession.duration : 'Not Started'}</span>                    </div>
                   </div>
                   
                   <div className="border-t border-slate-200/40 dark:border-white/5 pt-2 flex items-center justify-between">

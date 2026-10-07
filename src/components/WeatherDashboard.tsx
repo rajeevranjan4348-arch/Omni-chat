@@ -763,7 +763,7 @@ JSON Example:
 
   return (
     <div className="w-full">
-      {/* 1. COMPACT WEATHER WIDGET — intentionally simple and glanceable. */}
+      {/* 1. COMPACT WEATHER WIDGET — reference-style glance card. */}
       <motion.div
         role="button"
         tabIndex={0}
@@ -775,58 +775,71 @@ JSON Example:
           }
         }}
         whileTap={{ scale: 0.995 }}
-        className="dash-card relative h-[220px] overflow-hidden rounded-[24px] cursor-pointer group border border-white/10 hover:border-white/20"
+        className="relative h-[190px] overflow-hidden rounded-[24px] cursor-pointer group border border-white/10 shadow-lg"
         aria-label="Open full weather information"
       >
         {weather && (
-          <div className="absolute inset-0 pointer-events-none">
-            <div className={`absolute inset-0 bg-gradient-to-br ${activeWeatherInfo?.bgClass || 'from-slate-500 to-slate-800'} opacity-80`} />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/25" />
+          <>
+            {/* Soft sky scene — deliberately calm and minimal like the reference card. */}
+            <div className={`absolute inset-0 bg-gradient-to-b ${activeWeatherInfo?.bgClass || 'from-sky-400 via-sky-300 to-slate-200'} opacity-95`} />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_24%,rgba(255,255,255,.38),transparent_24%),linear-gradient(180deg,rgba(255,255,255,.08),transparent_55%,rgba(22,101,52,.12))]" />
+
+            {/* Minimal horizon/island silhouette. */}
+            <div className="absolute inset-x-0 bottom-0 h-[34%] overflow-hidden">
+              <div className="absolute inset-x-[-5%] bottom-[-18px] h-[70px] rounded-[50%] bg-gradient-to-t from-emerald-950/75 via-emerald-800/55 to-transparent blur-[2px]" />
+              <div className="absolute left-[10%] bottom-[14px] h-[38px] w-[24%] rounded-[50%] bg-emerald-900/55 blur-[5px]" />
+              <div className="absolute left-[30%] bottom-[9px] h-[45px] w-[34%] rounded-[50%] bg-emerald-950/50 blur-[6px]" />
+              <div className="absolute right-[8%] bottom-[12px] h-[34px] w-[25%] rounded-[50%] bg-emerald-900/45 blur-[5px]" />
+              <div className="absolute inset-x-0 bottom-0 h-[16px] bg-gradient-to-b from-cyan-200/45 to-cyan-500/30" />
+            </div>
+
             <WeatherBackgroundEffects
               code={weather.code}
               isWidget={true}
               isBoostEnabled={isPerformanceMode}
             />
-          </div>
+          </>
         )}
 
         {weatherLoading ? (
-          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2">
-            <RefreshCw size={22} className="text-white/80 animate-spin" />
-            <span className="text-white/65 text-xs">Updating weather…</span>
+          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2 text-white">
+            <RefreshCw size={22} className="animate-spin" />
+            <span className="text-xs text-white/80">Updating weather…</span>
           </div>
         ) : weather ? (
           <div className="relative z-10 flex h-full flex-col justify-between p-5 text-white">
             <div className="flex items-start justify-between">
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5 text-[13px] font-medium text-white/85">
+                <div className="flex items-center gap-1.5 text-[13px] font-medium text-white/90 drop-shadow-sm">
                   <Navigation size={14} className="shrink-0" />
                   <span className="truncate">{weather.city}</span>
                 </div>
-                <div className="mt-2 text-[58px] leading-none font-light tracking-[-0.05em]">
+
+                <div className="mt-2 text-[50px] leading-none font-light tracking-[-0.045em] drop-shadow-sm">
                   {weather.temp}°
                 </div>
-                <div className="mt-2 text-[18px] font-medium text-white/90">
+
+                <div className="mt-1 text-[17px] font-medium text-white/90 drop-shadow-sm">
                   {weather.desc}
                 </div>
               </div>
 
-              <div className="shrink-0 rounded-2xl bg-white/10 p-2.5 backdrop-blur-sm">
+              <div className="rounded-2xl bg-white/10 p-2.5 text-white/90 backdrop-blur-sm">
                 {activeWeatherInfo?.icon}
               </div>
             </div>
 
-            <div className="flex items-end justify-between gap-3">
-              <div className="text-[14px] font-medium text-white/75">
-                {weather.daily[0]?.tempMin ?? Math.round(weather.temp - 5)}° / {weather.daily[0]?.tempMax ?? Math.round(weather.temp + 2)}°
-              </div>
-              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                More <ChevronRight size={12} />
-              </div>
+            <div className="flex items-center gap-4 text-[11px] font-medium text-white/85 drop-shadow-sm">
+              <span>{weather.daily[0]?.tempMin ?? Math.round(weather.temp - 5)}°/{weather.daily[0]?.tempMax ?? Math.round(weather.temp + 2)}°</span>
+              <span>💧 {weather.humidity}%</span>
+              <span>💨 {Math.round(weather.windSpeed)} km/h</span>
+              <span className="ml-auto flex items-center gap-1 text-[9px] uppercase tracking-[0.14em] opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                Details <ChevronRight size={11} />
+              </span>
             </div>
           </div>
         ) : (
-          <div className="relative z-10 flex h-full items-center justify-center text-white/50 text-sm">
+          <div className="relative z-10 flex h-full items-center justify-center text-white/60 text-sm">
             Weather information unavailable
           </div>
         )}

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export const SettingsMode: React.FC = () => {
-  const { color, font, isDarkMode, setColor, setFont, setIsDarkMode, getBgClass, getTextClass, getAccentClass, getBorderClass } = useTheme();
+  const { color, font, isDarkMode, setColor, setFont, setIsDarkMode, wallpaper, setWallpaper, getBgClass, getTextClass, getAccentClass, getBorderClass } = useTheme();
   const effects = usePremiumEffects();
   const { 
     micId, setMicId, 
@@ -38,6 +38,8 @@ export const SettingsMode: React.FC = () => {
   const [newPresetCategory, setNewPresetCategory] = useState('Coding');
   const [newPresetPrompt, setNewPresetPrompt] = useState('');
   const [showAddPresetModal, setShowAddPresetModal] = useState(false);
+  const [wallpaperUrl, setWallpaperUrl] = useState('');
+  const [wallpaperBusy, setWallpaperBusy] = useState(false);
 
   // Status feedback
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -848,6 +850,116 @@ export const SettingsMode: React.FC = () => {
                 </div>
 
                 <div className={`h-px w-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`} />
+
+                {/* Background Wallpaper */}
+                <div className={`space-y-4 rounded-2xl border p-4 ${isDarkMode ? 'border-white/10 bg-white/[0.03]' : 'border-slate-200 bg-slate-50'}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="font-medium">Background Wallpaper</h3>
+                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                        Apply a personal image behind the existing UI. It is stored locally on this device.
+                      </p>
+                    </div>
+                    {wallpaper && (
+                      <button
+                        onClick={() => {
+                          setWallpaper(null);
+                          setWallpaperUrl('');
+                          triggerToast('Wallpaper removed.');
+                        }}
+                        className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {wallpaper && (
+                    <div
+                      className="h-28 rounded-xl border border-white/10 bg-cover bg-center"
+                      style={{ backgroundImage: `url("${wallpaper}")` }}
+                      aria-label="Current wallpaper preview"
+                    />
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-500/15 border border-cyan-500/25 text-cyan-300 hover:bg-cyan-500/25 text-xs font-semibold cursor-pointer transition-colors">
+                      <Upload size={14} />
+                      Upload wallpaper
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/avif"
+                        className="hidden"
+                        disabled={wallpaperBusy}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.currentTarget.value = '';
+                          if (!file) return;
+                          if (!file.type.startsWith('image/')) {
+                            triggerToast('Please select an image file.');
+                            return;
+                          }
+                          setWallpaperBusy(true);
+                          try {
+                            const dataUrl = await new Promise<string>((resolve, reject) => {
+                              const reader = new FileReader();
+                              reader.onload = () => resolve(String(reader.result));
+                              reader.onerror = () => reject(new Error('Could not read image.'));
+                              reader.readAsDataURL(file);
+                            });
+                            const optimized = await new Promise<string>((resolve, reject) => {
+                              const image = new Image();
+                              image.onload = () => {
+                                const maxSide = 1920;
+                                const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+                                const canvas = document.createElement('canvas');
+                                canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                                canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                                const ctx = canvas.getContext('2d');
+                                if (!ctx) return reject(new Error('Canvas unavailable.'));
+                                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                                resolve(canvas.toDataURL('image/webp', 0.78));
+                              };
+                              image.onerror = () => reject(new Error('Could not decode image.'));
+                              image.src = dataUrl;
+                            });
+                            setWallpaper(optimized);
+                            triggerToast('Wallpaper applied.');
+                          } catch (error) {
+                            triggerToast('Wallpaper could not be applied.');
+                          } finally {
+                            setWallpaperBusy(false);
+                          }
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      onClick={() => {
+                        const value = wallpaperUrl.trim();
+                        if (!/^https?:\/\//i.test(value)) {
+                          triggerToast('Enter a valid image URL.');
+                          return;
+                        }
+                        setWallpaper(value);
+                        triggerToast('Wallpaper applied.');
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 border border-white/10 text-xs font-semibold hover:bg-white/15 transition-colors"
+                    >
+                      <Globe size={14} />
+                      Apply URL
+                    </button>
+                  </div>
+
+                  <input
+                    value={wallpaperUrl}
+                    onChange={(e) => setWallpaperUrl(e.target.value)}
+                    placeholder="https://example.com/wallpaper.jpg"
+                    className={`w-full p-2.5 rounded-xl border text-xs outline-none transition-colors ${
+                      isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'
+                    }`}
+                  />
+                </div>
 
                 {/* Performance / Graphics Mode */}
                 <div className="flex items-center justify-between">

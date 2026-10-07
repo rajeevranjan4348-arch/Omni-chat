@@ -12,6 +12,9 @@ import { useSettings } from '../contexts/SettingsContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, saveVoiceCommandToCloud, saveVoiceSessionToCloud, deleteVoiceSessionFromCloud, syncVoiceSessions } from '../lib/firebase';
 import { ScreenStreamModal } from '../components/ScreenStreamModal';
+import { OrbBloop } from '../components/orb/bloop';
+import { BloopState } from '../components/orb/bloop/types';
+import { BLOOP_PALETTES, BloopPaletteName } from '../components/orb/bloop/palettes';
 
 export interface VoiceSession {
   id: string;
@@ -116,7 +119,16 @@ export const VoiceMode: React.FC = () => {
   const colorRef = useRef(color);
 
   const [isMuted, setIsMuted] = useState(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const isMutedRef = useRef(false);
+  const orbPalette = BLOOP_PALETTES[BloopPaletteName.blue];
+  const orbState = isConnecting
+    ? BloopState.think
+    : isAiSpeaking
+      ? BloopState.speak
+      : isConnected && !isMuted
+        ? BloopState.listen
+        : BloopState.idle;
   const [showDrawer, setShowDrawer] = useState(true);
   const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   const [interactionHistory, setInteractionHistory] = useState<VoiceHistoryItem[]>([]);
@@ -777,6 +789,7 @@ export const VoiceMode: React.FC = () => {
     setStatus('Disconnected');
     playbackQueueRef.current = [];
     isPlayingRef.current = false;
+    setIsAiSpeaking(false);
 
     if (callStartTimeRef.current && currentSessionId) {
       const durationMs = Date.now() - callStartTimeRef.current;
@@ -967,6 +980,7 @@ export const VoiceMode: React.FC = () => {
   };
 
   const playAudioChunk = (base64Audio: string) => {
+    setIsAiSpeaking(true);
     const binaryString = atob(base64Audio);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
@@ -990,6 +1004,7 @@ export const VoiceMode: React.FC = () => {
   const processPlaybackQueue = () => {
     if (playbackQueueRef.current.length === 0 || !audioContextRef.current) {
       isPlayingRef.current = false;
+      setIsAiSpeaking(false);
       return;
     }
     
@@ -1017,6 +1032,7 @@ export const VoiceMode: React.FC = () => {
     
     source.onended = () => {
       processPlaybackQueue();
+      if (playbackQueueRef.current.length === 0) setIsAiSpeaking(false);
     };
     
     source.start();
@@ -1547,6 +1563,22 @@ export const VoiceMode: React.FC = () => {
               isDarkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'
             }`}>
               
+              <div className="relative flex items-center justify-center w-full h-[220px] mb-2" aria-label="Voice activity orb">
+                <OrbBloop
+                  size={210}
+                  audioMode="ambient"
+                  demoMode={true}
+                  state={orbState}
+                  bloopColorMain={orbPalette.main}
+                  bloopColorLow={orbPalette.low}
+                  bloopColorMid={orbPalette.mid}
+                  bloopColorHigh={orbPalette.high}
+                  watercolorStrength={0.5}
+                  watercolorAnimated={false}
+                  className="drop-shadow-[0_0_28px_rgba(56,189,248,0.18)]"
+                />
+              </div>
+
               <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-colors ${
                 isConnected 
                   ? (isMuted ? 'bg-amber-950/40 text-amber-500' : (isDarkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-100 text-emerald-500')) 

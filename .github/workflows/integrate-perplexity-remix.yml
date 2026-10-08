@@ -123,14 +123,53 @@ jobs:
 
           # Preserve the Perplexity suggestions endpoint as a Netlify Function.
           mkdir -p netlify/functions
-          cp .perplexity-remix/functions/suggestions.ts netlify/functions/perplexity-suggestions.ts
+          cat > netlify/functions/perplexity-suggestions.ts <<'TS'
+          import type { Handler } from '@netlify/functions';
+
+          const handler: Handler = async (event) => {
+            if (event.httpMethod === 'OPTIONS') {
+              return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'authorization, content-type' }, body: '' };
+            }
+            try {
+              const query = new URLSearchParams(event.rawQuery || '').get('q') ||
+                (event.body ? JSON.parse(event.body).q : '');
+              if (!query) {
+                return { statusCode: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }, body: JSON.stringify({ suggestions: [] }) };
+              }
+              const response = await fetch(`https://www.google.com/complete/search?client=chrome&q=${encodeURIComponent(query)}`);
+              const data = await response.json() as [string, string[]];
+              return {
+                statusCode: 200,
+                headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ suggestions: data[1] || [] }),
+              };
+            } catch {
+              return {
+                statusCode: 500,
+                headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Internal error' }),
+              };
+            }
+          };
+
+          export { handler }; 
+          export default handler;
+          TS
 
           node <<'NODE'
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
           const srcPkg = JSON.parse(fs.readFileSync('.perplexity-remix/package.json','utf8'));
-          pkg.dependencies = {...pkg.dependencies, ...srcPkg.dependencies};
-          pkg.devDependencies = {...pkg.devDependencies, ...srcPkg.devDependencies};
+          // Merge Remix dependencies without downgrading OmniChat's existing Vite/Tailwind/React toolchain.
+          const existingDeps = {...pkg.dependencies};
+          const existingDevDeps = {...pkg.devDependencies};
+          pkg.dependencies = {...srcPkg.dependencies, ...existingDeps};
+          pkg.devDependencies = {...srcPkg.devDependencies, ...existingDevDeps};
+          // These packages are owned by the host build and must stay on OmniChat's versions.
+          for (const name of ['react','react-dom','vite','@vitejs/plugin-react','typescript','tailwindcss','@tailwindcss/vite']) {
+            if (existingDeps[name]) pkg.dependencies[name] = existingDeps[name];
+            if (existingDevDeps[name]) pkg.devDependencies[name] = existingDevDeps[name];
+          }
           fs.writeFileSync('package.json', JSON.stringify(pkg,null,2)+'\n');
           NODE
 
@@ -154,7 +193,7 @@ jobs:
           NODE
 
           # Generate a single lockfile from OmniChat's dependency graph.
-          npm install --package-lock-only --ignore-scripts
+          npm install --legacy-peer-deps --ignore-scripts
 
           # Verify the actual integrated application before committing it.
           npm run lint

@@ -1,0 +1,22 @@
+name: OmniChat Image Generation Export
+on: push
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -e
+          mkdir -p export/src/modes export/src/services export/src/hooks export/src/contexts export/project
+          cp src/modes/ImageGenerationMode.tsx export/src/modes/
+          cp src/services/gemini.ts export/src/services/
+          cp src/hooks/usePeriodicAutoSave.ts export/src/hooks/
+          cp src/contexts/ThemeContext.tsx export/src/contexts/
+          cp package.json vite.config.ts .env.example export/project/
+          echo "OmniChat Image Generation source export" > export/MANIFEST.txt
+          echo "Commit: $(git rev-parse HEAD)" >> export/MANIFEST.txt
+          zip -r omnichat-image-generation-source.zip export
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omnichat-image-generation-source
+          path: omnichat-image-generation-source.zip

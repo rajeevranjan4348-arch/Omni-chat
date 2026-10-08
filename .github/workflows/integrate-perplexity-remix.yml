@@ -1,4 +1,4 @@
-name: Integrate Perplexity Remix Chat
+name: Replace OmniChat Mode with Perplexity Remix
 
 on:
   push:
@@ -25,143 +25,58 @@ jobs:
           ref: main
           path: .perplexity-remix
 
-      - name: Integrate Perplexity Remix source
+      - name: Replace OmniChat mode with the complete Perplexity Remix source
         shell: bash
         run: |
           set -euo pipefail
 
+          rm -rf src/integrations/perplexity
           mkdir -p src/integrations/perplexity
-          rm -rf src/integrations/perplexity/components src/integrations/perplexity/hooks src/integrations/perplexity/lib src/integrations/perplexity/features
-          mkdir -p src/integrations/perplexity/components src/integrations/perplexity/hooks src/integrations/perplexity/lib src/integrations/perplexity/features
 
-          cp -R .perplexity-remix/src/components/layout src/integrations/perplexity/components/
-          cp -R .perplexity-remix/src/components/research src/integrations/perplexity/components/
-          cp -R .perplexity-remix/src/components/ui src/integrations/perplexity/components/
-          cp -R .perplexity-remix/src/hooks/. src/integrations/perplexity/hooks/
-          cp -R .perplexity-remix/src/lib/. src/integrations/perplexity/lib/
-          cp -R .perplexity-remix/src/features/. src/integrations/perplexity/features/
-          cp .perplexity-remix/src/App.tsx src/integrations/perplexity/App.tsx
+          # Copy the complete Perplexity source tree so no research/chat UI,
+          # hook, feature, agent, library, or component is omitted.
+          cp -R .perplexity-remix/src/. src/integrations/perplexity/
 
-          # Keep Perplexity source self-contained under @perplexity/*.
+          # The host app supplies its own entry point; these are not imported by the mode.
+          rm -f src/integrations/perplexity/main.ts src/integrations/perplexity/main.tsx
+
+          # Namespace all Perplexity @/ imports so they cannot resolve to OmniChat files.
           find src/integrations/perplexity -type f \( -name '*.ts' -o -name '*.tsx' \) -print0 |
             xargs -0 sed -i 's#@/#@perplexity/#g'
 
-          # Preserve OmniChat's global CSS/theme. Only copy Perplexity's component-local
-          # visual utilities; do not import its global body/root styles.
-          cat > src/integrations/perplexity/perplexity.css <<'CSS'
-          .perplexity-remix-scope .prose {
-            color: rgba(255,255,255,.82);
-            max-width: none;
-          }
-          .perplexity-remix-scope .prose h1,
-          .perplexity-remix-scope .prose h2,
-          .perplexity-remix-scope .prose h3,
-          .perplexity-remix-scope .prose h4 {
-            color: rgba(255,255,255,.92);
-            font-weight: 600;
-            letter-spacing: -.015em;
-          }
-          .perplexity-remix-scope .prose p { line-height: 1.75; }
-          .perplexity-remix-scope .prose a { color: hsl(var(--accent)); text-decoration: none; }
-          .perplexity-remix-scope .prose a:hover { text-decoration: underline; }
-          .perplexity-remix-scope .prose strong { color: rgba(255,255,255,.92); }
-          .perplexity-remix-scope .prose code {
-            background: rgba(255,255,255,.07);
-            border: 1px solid rgba(255,255,255,.1);
-            border-radius: 5px;
-            padding: .1em .35em;
-            font-size: .85em;
-            color: rgba(255,255,255,.8);
-          }
-          .perplexity-remix-scope .prose pre {
-            background: rgba(255,255,255,.04);
-            border: 1px solid rgba(255,255,255,.08);
-            border-radius: 12px;
-          }
-          .perplexity-remix-scope .prose blockquote {
-            border-left-color: rgba(255,255,255,.15);
-            color: rgba(255,255,255,.55);
-          }
-          .perplexity-remix-scope .citation {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 1.25rem;
-            height: 1.25rem;
-            margin-left: .25rem;
-            font-size: 10px;
-            font-weight: 700;
-            color: #fff;
-            background: hsl(var(--accent));
-            border-radius: 9999px;
-            vertical-align: top;
-            margin-top: .125rem;
-            cursor: pointer;
-          }
-          .perplexity-remix-scope .glass {
-            background: rgba(255,255,255,.04);
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
-            border: 1px solid rgba(255,255,255,.07);
-          }
-          .perplexity-remix-scope .glass-subtle {
-            background: rgba(255,255,255,.025);
-            backdrop-filter: blur(12px) saturate(150%);
-            -webkit-backdrop-filter: blur(12px) saturate(150%);
-            border: 1px solid rgba(255,255,255,.05);
-          }
-          .perplexity-remix-scope .glass-strong {
-            background: rgba(255,255,255,.06);
-            backdrop-filter: blur(32px) saturate(200%);
-            -webkit-backdrop-filter: blur(32px) saturate(200%);
-            border: 1px solid rgba(255,255,255,.09);
-          }
-          .perplexity-remix-scope .glass-input {
-            background: rgba(255,255,255,.03);
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid rgba(255,255,255,.08);
-            transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
-          }
-          .perplexity-remix-scope .glass-input:focus-within {
-            background: rgba(255,255,255,.05);
-            border-color: rgba(255,255,255,.14);
-            box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 8px 32px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
-          }
-          @keyframes perplexity-fade-in-up {
-            from { opacity:0; transform:translateY(12px); }
-            to { opacity:1; transform:translateY(0); }
-          }
-          .perplexity-remix-scope .animate-fade-in-up { animation: perplexity-fade-in-up .5s cubic-bezier(.16,1,.3,1) forwards; }
-          @keyframes perplexity-slide-up {
-            from { opacity:0; transform:translateY(24px) scale(.98); }
-            to { opacity:1; transform:translateY(0) scale(1); }
-          }
-          .perplexity-remix-scope .animate-slide-up { animation: perplexity-slide-up .6s cubic-bezier(.16,1,.3,1) forwards; }
-          @keyframes perplexity-fade-in { from {opacity:0} to {opacity:1} }
-          .perplexity-remix-scope .animate-fade-in { animation: perplexity-fade-in .4s ease forwards; }
-          CSS
+          # Preserve Perplexity's complete visual system inside the mode. Tailwind utility
+          # classes are generated by Omni's build, while these local rules/tokens restore
+          # the Remix look without changing unrelated Omni pages.
+          cp .perplexity-remix/src/index.css src/integrations/perplexity/perplexity.css
+          sed -i '/^@tailwind base;/d; /^@tailwind components;/d; /^@tailwind utilities;/d' src/integrations/perplexity/perplexity.css
 
-          # Preserve the previous Omni implementation instead of deleting it.
-          if [ -f src/modes/OmniChatMode.tsx ] && [ ! -f src/modes/OmniChatModeLegacy.tsx ]; then
-            mv src/modes/OmniChatMode.tsx src/modes/OmniChatModeLegacy.tsx
-          fi
+          # Remove document-global selectors from the imported stylesheet.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/integrations/perplexity/perplexity.css")
+          s=p.read_text()
+          s=s.replace("  html {", "  .perplexity-remix-scope {")
+          s=s.replace("  body {", "  .perplexity-remix-scope {")
+          s=s.replace("  .dark {", "  .perplexity-remix-scope.dark {")
+          s=s.replace("  * {", "  .perplexity-remix-scope * {")
+          s=s.replace("::-webkit-scrollbar", ".perplexity-remix-scope ::-webkit-scrollbar")
+          s=s.replace("body > *", ".perplexity-remix-scope > *")
+          p.write_text(s)
+          PY
+
+          # Remove the old OmniChat UI entirely; this mode is now the Remix UI.
+          rm -f src/modes/OmniChatModeLegacy.tsx
 
           cat > src/modes/OmniChatMode.tsx <<'TSX'
           import React from 'react';
+          import { BlinkProvider } from '@blinkdotnew/react';
           import PerplexityRemixApp from '../integrations/perplexity/App';
           import '../integrations/perplexity/perplexity.css';
 
-          /**
-           * OmniChat mode now hosts the complete Perplexity Remix research/chat
-           * experience. The legacy OmniChat implementation remains available in
-           * OmniChatModeLegacy.tsx and is intentionally not deleted.
-           */
           export const OmniChatMode: React.FC = () => (
             <div
               className="perplexity-remix-scope w-full h-full min-h-0 overflow-hidden"
               style={{
-                // Perplexity Remix design tokens are scoped to this mode only.
                 ['--background' as string]: '0 0% 0%',
                 ['--foreground' as string]: '0 0% 95%',
                 ['--card' as string]: '0 0% 5%',
@@ -176,6 +91,8 @@ jobs:
                 ['--muted-foreground' as string]: '0 0% 55%',
                 ['--accent' as string]: '217 91% 60%',
                 ['--accent-foreground' as string]: '0 0% 100%',
+                ['--destructive' as string]: '0 62.8% 40%',
+                ['--destructive-foreground' as string]: '0 0% 98%',
                 ['--border' as string]: '0 0% 14%',
                 ['--input' as string]: '0 0% 14%',
                 ['--ring' as string]: '0 0% 60%',
@@ -184,65 +101,36 @@ jobs:
                 ['--font-mono' as string]: "'JetBrains Mono', monospace",
               }}
             >
-              <PerplexityRemixApp />
+              <BlinkProvider
+                projectId={import.meta.env.VITE_BLINK_PROJECT_ID || 'perplexity-9xplge2w'}
+                publishableKey={import.meta.env.VITE_BLINK_PUBLISHABLE_KEY || 'blnk_pk_xxx'}
+                showBranding={false}
+              >
+                <PerplexityRemixApp />
+              </BlinkProvider>
             </div>
           );
-          
+
           export default OmniChatMode;
           TSX
 
-          rm -rf .perplexity-remix
+          # Preserve all Perplexity public assets under a dedicated prefix.
+          rm -rf public/perplexity-remix
+          mkdir -p public/perplexity-remix
+          if [ -d .perplexity-remix/public ]; then
+            cp -R .perplexity-remix/public/. public/perplexity-remix/
+          fi
+
+          # Preserve the Perplexity suggestions endpoint as a Netlify Function.
+          mkdir -p netlify/functions
+          cp .perplexity-remix/functions/suggestions.ts netlify/functions/perplexity-suggestions.ts
+
           node <<'NODE'
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
-          const add = {
-            "@blinkdotnew/react":"^1.0.2",
-            "@blinkdotnew/sdk":"2.3.4",
-            "@dnd-kit/core":"^6.3.1",
-            "@hookform/resolvers":"^5.2.2",
-            "@radix-ui/react-accordion":"^1.2.12",
-            "@radix-ui/react-alert-dialog":"^1.1.15",
-            "@radix-ui/react-aspect-ratio":"^1.1.8",
-            "@radix-ui/react-avatar":"^1.1.11",
-            "@radix-ui/react-checkbox":"^1.3.3",
-            "@radix-ui/react-collapsible":"^1.1.12",
-            "@radix-ui/react-context-menu":"^2.2.16",
-            "@radix-ui/react-dialog":"^1.1.15",
-            "@radix-ui/react-dropdown-menu":"^2.1.16",
-            "@radix-ui/react-hover-card":"^1.1.15",
-            "@radix-ui/react-label":"^2.1.8",
-            "@radix-ui/react-menubar":"^1.1.16",
-            "@radix-ui/react-navigation-menu":"^1.2.14",
-            "@radix-ui/react-popover":"^1.1.15",
-            "@radix-ui/react-progress":"^1.1.8",
-            "@radix-ui/react-radio-group":"^1.3.8",
-            "@radix-ui/react-scroll-area":"^1.2.10",
-            "@radix-ui/react-select":"^2.2.6",
-            "@radix-ui/react-separator":"^1.1.8",
-            "@radix-ui/react-slider":"^1.2.6",
-            "@radix-ui/react-slot":"^1.2.4",
-            "@radix-ui/react-switch":"^1.2.6",
-            "@radix-ui/react-tabs":"^1.1.13",
-            "@radix-ui/react-toggle":"^1.1.10",
-            "@radix-ui/react-toggle-group":"^1.1.11",
-            "@radix-ui/react-tooltip":"^1.2.8",
-            "class-variance-authority":"^0.7.1",
-            "cmdk":"^1.1.1",
-            "date-fns":"^4.1.0",
-            "embla-carousel-react":"^8.6.0",
-            "framer-motion":"^12.23.26",
-            "input-otp":"^1.4.2",
-            "next-themes":"^0.4.6",
-            "react-day-picker":"^9.13.0",
-            "react-hook-form":"^7.69.0",
-            "react-hot-toast":"^2.6.0",
-            "react-responsive":"^10.0.1",
-            "react-router-dom":"^7.11.0",
-            "tailwindcss-animate":"^1.0.7",
-            "vaul":"^1.1.2",
-            "zod":"^4.3.4"
-          };
-          pkg.dependencies = {...pkg.dependencies, ...add};
+          const srcPkg = JSON.parse(fs.readFileSync('.perplexity-remix/package.json','utf8'));
+          pkg.dependencies = {...pkg.dependencies, ...srcPkg.dependencies};
+          pkg.devDependencies = {...pkg.devDependencies, ...srcPkg.devDependencies};
           fs.writeFileSync('package.json', JSON.stringify(pkg,null,2)+'\n');
           NODE
 
@@ -253,7 +141,7 @@ jobs:
           if (!s.includes("'@perplexity'")) {
             s = s.replace(
               /alias:\s*\{([\s\S]*?)\n\s*\},/,
-              (m, body) => "alias: {" + body + "\n        '@perplexity': path.resolve(__dirname, './src/integrations/perplexity')," + "\n      },"
+              (m, body) => "alias: {" + body + "\n        '@perplexity': path.resolve(__dirname, './src/integrations/perplexity'),\n      },"
             );
           }
           fs.writeFileSync(p,s);
@@ -265,12 +153,18 @@ jobs:
           fs.writeFileSync(t, JSON.stringify(cfg,null,2)+'\n');
           NODE
 
+          # Generate a single lockfile from OmniChat's dependency graph.
           npm install --package-lock-only --ignore-scripts
+
+          # Verify the actual integrated application before committing it.
           npm run lint
           npm run build
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/integrations/perplexity src/modes/OmniChatMode.tsx src/modes/OmniChatModeLegacy.tsx package.json package-lock.json vite.config.ts tsconfig.json
-          git commit -m "feat: replace OmniChat mode with Perplexity Remix" || exit 0
+          git add src/integrations/perplexity src/modes/OmniChatMode.tsx public/perplexity-remix netlify/functions/perplexity-suggestions.ts package.json package-lock.json vite.config.ts tsconfig.json
+          git add -u src/modes/OmniChatModeLegacy.tsx
+          git commit -m "feat: replace OmniChat mode with complete Perplexity Remix"
           git push origin main
+
+          rm -rf .perplexity-remix

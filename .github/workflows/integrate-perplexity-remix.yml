@@ -49,6 +49,16 @@ jobs:
           # the Remix look without changing unrelated Omni pages.
           cp .perplexity-remix/src/index.css src/integrations/perplexity/perplexity.css
           sed -i '/^@tailwind base;/d; /^@tailwind components;/d; /^@tailwind utilities;/d' src/integrations/perplexity/perplexity.css
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/integrations/perplexity/perplexity.css")
+          s=p.read_text()
+          s=s.replace("@apply border-border;", "border-color: hsl(var(--border));")
+          s=s.replace("@apply bg-background text-foreground antialiased;", "background-color: hsl(var(--background)); color: hsl(var(--foreground)); -webkit-font-smoothing: antialiased;")
+          s=s.replace("@apply inline-flex items-center justify-center w-5 h-5 ml-1 text-[10px] font-bold text-white bg-accent rounded-full align-top mt-0.5 cursor-pointer hover:bg-accent/80 transition-colors;", "display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;margin-left:.25rem;font-size:10px;font-weight:700;color:#fff;background-color:hsl(var(--accent));border-radius:9999px;vertical-align:top;margin-top:.125rem;cursor:pointer;transition:background-color .15s ease;")
+          s=s.replace("@apply bg-transparent;", "background-color:transparent;")
+          p.write_text(s)
+          PY
 
           # Remove document-global selectors from the imported stylesheet.
           python3 - <<'PY'
@@ -104,7 +114,6 @@ jobs:
               <BlinkProvider
                 projectId={import.meta.env.VITE_BLINK_PROJECT_ID || 'perplexity-9xplge2w'}
                 publishableKey={import.meta.env.VITE_BLINK_PUBLISHABLE_KEY || 'blnk_pk_xxx'}
-                showBranding={false}
               >
                 <PerplexityRemixApp />
               </BlinkProvider>
@@ -213,7 +222,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/integrations/perplexity src/modes/OmniChatMode.tsx public/perplexity-remix netlify/functions/perplexity-suggestions.ts package.json package-lock.json vite.config.ts tsconfig.json perplexity-integration-build.log
-          git add -u src/modes/OmniChatModeLegacy.tsx
+          git add -u src/modes
           git commit -m "feat: replace OmniChat mode with complete Perplexity Remix"
           git push origin main
 

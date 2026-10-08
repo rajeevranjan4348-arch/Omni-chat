@@ -344,3 +344,82 @@ button, [role="button"], input, textarea, select { touch-action: manipulation; }
     scroll-behavior: auto !important;
   }
 }
+
+
+/* Omni UI polish: preserve existing layout, improve depth, motion and interaction quality. */
+:root {
+  color-scheme: dark;
+  --omni-ease: cubic-bezier(.22,1,.36,1);
+  --omni-border: rgba(255,255,255,.08);
+  --omni-highlight: rgba(255,255,255,.055);
+}
+body {
+  background: #09090b;
+  text-rendering: optimizeLegibility;
+}
+button, [role="button"] {
+  transition:
+    transform 180ms var(--omni-ease),
+    opacity 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: translateY(1px) scale(.985);
+}
+button:disabled { cursor: not-allowed; opacity: .55; }
+input, textarea, select {
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+input::placeholder, textarea::placeholder { transition: opacity 160ms ease; }
+input:focus::placeholder, textarea:focus::placeholder { opacity: .55; }
+
+.omni-surface {
+  border: 1px solid var(--omni-border);
+  background: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+  box-shadow:
+    0 18px 45px rgba(0,0,0,.16),
+    inset 0 1px 0 var(--omni-highlight);
+}
+.omni-hover {
+  transition: transform 220ms var(--omni-ease), border-color 180ms ease, box-shadow 220ms ease;
+}
+.omni-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,.13);
+  box-shadow: 0 16px 36px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.055);
+}
+.omni-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.omni-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.055) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: omni-shimmer 3.8s ease-in-out infinite;
+}
+@keyframes omni-shimmer {
+  0%, 55% { transform: translateX(-120%); }
+  75%, 100% { transform: translateX(120%); }
+}
+.omni-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 10%, transparent), 0 0 14px currentColor;
+  animation: omni-status-pulse 2.2s ease-in-out infinite;
+}
+@keyframes omni-status-pulse {
+  0%, 100% { opacity: .7; transform: scale(.92); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .omni-shimmer::after, .omni-status-dot { animation: none; }
+}

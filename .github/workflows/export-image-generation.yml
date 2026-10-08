@@ -3,82 +3,28 @@ name: Export Image Generation Source
 on:
   push:
     branches:
-      - 'export/image-generation-20261008'
-  workflow_dispatch:
+      - export/image-generation-20261008
 
 jobs:
   export:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - name: Checkout exact source
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Build feature source package
-        shell: bash
+      - uses: actions/checkout@v4
+      - name: Package
         run: |
-          set -euo pipefail
-          OUT="omnichat-image-generation-source"
-          rm -rf "$OUT" "$OUT.zip"
-          mkdir -p "$OUT/src/modes" "$OUT/src/services" "$OUT/src/hooks" "$OUT/src/contexts" "$OUT/project"
-          cp src/modes/ImageGenerationMode.tsx "$OUT/src/modes/"
-          cp src/services/gemini.ts "$OUT/src/services/"
-          cp src/hooks/usePeriodicAutoSave.ts "$OUT/src/hooks/"
-          cp src/contexts/ThemeContext.tsx "$OUT/src/contexts/"
-          cp package.json "$OUT/project/"
-          cp vite.config.ts "$OUT/project/"
-          cp .env.example "$OUT/project/"
-          cat > "$OUT/IMAGE_GENERATION_ANALYSIS.md" <<'EOF'
-# OmniChat Image Generation — Complete Source Export
-
-Source repository: rajeevranjan4348-arch/Omni-chat
-Exported from the exact GitHub commit checked out by this workflow.
-
-## Core execution path
-1. src/modes/ImageGenerationMode.tsx — prompt input, style presets, aspect ratios, sessions, Gemini image request, base64 extraction, persistence and image actions.
-2. src/services/gemini.ts — GoogleGenAI creation, GEMINI_API_KEY injection, getAiInstance(), and shared Gemini fallback/proxy behavior.
-3. src/hooks/usePeriodicAutoSave.ts — persistence and lifecycle flush used by image sessions.
-4. src/contexts/ThemeContext.tsx — useTheme() dependency consumed by the image-generation mode.
-5. project/package.json — runtime dependencies including @google/genai, React, Motion and Lucide.
-6. project/vite.config.ts — exposes Gemini environment variables to the Vite client build.
-7. project/.env.example — environment-variable template.
-
-## Original-app integration points
-- src/App.tsx imports ImageGenerationMode and renders it for currentMode === image-gen.
-- src/types.ts defines image-gen as an AppMode.
-- src/components/Sidebar.tsx exposes the Image Generation navigation item.
-
-Those shared integration files are documented rather than duplicated because they contain unrelated application modes/features. The four core dependency files above are copied in full and are not rewritten.
-
-## Model call
-Model: gemini-3.1-flash-lite-image
-Input: enhanced text prompt using the selected style preset.
-Config: imageConfig.aspectRatio.
-Output: first inlineData part converted to a data:image/png;base64 URL.
-
-API keys and generated user data are not included.
-EOF
-          {
-            echo "# Export manifest"
-            echo
-            echo "Commit: $(git rev-parse HEAD)"
-            echo "Branch: $(git branch --show-current)"
-            echo
-            echo "## Files"
-            printf '%s\n' "src/modes/ImageGenerationMode.tsx" "src/services/gemini.ts" "src/hooks/usePeriodicAutoSave.ts" "src/contexts/ThemeContext.tsx" "project/package.json" "project/vite.config.ts" "project/.env.example" "IMAGE_GENERATION_ANALYSIS.md"
-            echo
-            echo "## SHA-256"
-            cd "$OUT"
-            sha256sum src/modes/ImageGenerationMode.tsx src/services/gemini.ts src/hooks/usePeriodicAutoSave.ts src/contexts/ThemeContext.tsx project/package.json project/vite.config.ts project/.env.example IMAGE_GENERATION_ANALYSIS.md
-          } > "$OUT/MANIFEST.txt"
-          zip -r "$OUT.zip" "$OUT" >/dev/null
-
-      - name: Upload ZIP artifact
-        uses: actions/upload-artifact@v4
+          set -e
+          mkdir -p export/src/modes export/src/services export/src/hooks export/src/contexts export/project
+          cp src/modes/ImageGenerationMode.tsx export/src/modes/
+          cp src/services/gemini.ts export/src/services/
+          cp src/hooks/usePeriodicAutoSave.ts export/src/hooks/
+          cp src/contexts/ThemeContext.tsx export/src/contexts/
+          cp package.json vite.config.ts .env.example export/project/
+          printf '%s
+' 'OmniChat Image Generation source export' 'Commit:' "$(git rev-parse HEAD)" > export/MANIFEST.txt
+          printf '%s
+' 'Core: ImageGenerationMode.tsx -> gemini.ts -> @google/genai' >> export/MANIFEST.txt
+          zip -r omnichat-image-generation-source.zip export
+      - uses: actions/upload-artifact@v4
         with:
           name: omnichat-image-generation-source
           path: omnichat-image-generation-source.zip
-          if-no-files-found: error

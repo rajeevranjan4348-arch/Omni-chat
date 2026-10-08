@@ -28,7 +28,7 @@ jobs:
       - name: Replace OmniChat mode with the complete Perplexity Remix source
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           rm -rf src/integrations/perplexity
           mkdir -p src/integrations/perplexity
@@ -192,18 +192,33 @@ jobs:
           fs.writeFileSync(t, JSON.stringify(cfg,null,2)+'\n');
           NODE
 
-          # Generate a single lockfile from OmniChat's dependency graph.
-          npm install --legacy-peer-deps --ignore-scripts
+          # Generate a single lockfile from OmniChat's dependency graph and capture diagnostics.
+          : > perplexity-integration-build.log
+          install_status=0
+          npm install --legacy-peer-deps --ignore-scripts 2>&1 | tee -a perplexity-integration-build.log || install_status=$?
 
-          # Verify the actual integrated application before committing it.
-          npm run lint
-          npm run build
+          lint_status=0
+          npm run lint 2>&1 | tee -a perplexity-integration-build.log || lint_status=$?
+
+          build_status=0
+          npm run build 2>&1 | tee -a perplexity-integration-build.log || build_status=$?
+
+          {
+            echo
+            echo "INSTALL_STATUS=$install_status"
+            echo "LINT_STATUS=$lint_status"
+            echo "BUILD_STATUS=$build_status"
+          } >> perplexity-integration-build.log
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/integrations/perplexity src/modes/OmniChatMode.tsx public/perplexity-remix netlify/functions/perplexity-suggestions.ts package.json package-lock.json vite.config.ts tsconfig.json
+          git add src/integrations/perplexity src/modes/OmniChatMode.tsx public/perplexity-remix netlify/functions/perplexity-suggestions.ts package.json package-lock.json vite.config.ts tsconfig.json perplexity-integration-build.log
           git add -u src/modes/OmniChatModeLegacy.tsx
           git commit -m "feat: replace OmniChat mode with complete Perplexity Remix"
           git push origin main
 
           rm -rf .perplexity-remix
+
+          if [ "$install_status" -ne 0 ] || [ "$lint_status" -ne 0 ] || [ "$build_status" -ne 0 ]; then
+            exit 1
+          fi
